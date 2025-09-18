@@ -10,7 +10,6 @@ if ($_POST['action'] == 'add_to_cart') {
     $product_id = (int) $_POST['product_id'];
     $quantity = isset($_POST['quantity']) ? (int) $_POST['quantity'] : 1;
 
-    // Get product details from database
     $query = "SELECT * FROM product WHERE id = $product_id";
     $result = mysqli_query($db, $query);
     $product = mysqli_fetch_assoc($result);

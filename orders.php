@@ -13,42 +13,31 @@ if (!isset($_SESSION['cart'])) {
 $cart_count = count($_SESSION['cart']);
 
 $user_id = $_SESSION["user_id"];
-$sql = "SELECT fullname, username, phone, address, profile_picture 
-        FROM users WHERE id = '$user_id'";
-$result = mysqli_query($db, $sql);
+$result = mysqli_query($db, "SELECT fullname, username, phone, address, profile_picture FROM users WHERE id = '$user_id'");
 if ($result) {
     $user_data = mysqli_fetch_assoc($result);
 }
 
-// Updated query to use transaction table (to match with invoice.php)
-$orders_sql = "
-    SELECT id_transaction as id, date as order_date, total_price, 
-           status as order_status, payment_method
-    FROM transaction
-    WHERE id_user = '$user_id'
-    ORDER BY date DESC
-";
-$orders_result = mysqli_query($db, $orders_sql);
+$orders_result = mysqli_query($db, "SELECT id_transaction as id, date as order_date, total_price, 
+                                           status as order_status, payment_method
+                                    FROM transaction
+                                    WHERE id_user = '$user_id'
+                                    ORDER BY date DESC");
 
 $user_orders = [];
 if ($orders_result) {
     while ($row = mysqli_fetch_assoc($orders_result)) {
-        // Ambil total item dari tabel detail
         $order_id = $row['id'];
-        $detail_sql = "SELECT SUM(amount) AS total_items 
-                       FROM detail 
-                       WHERE id_transaction = '$order_id'";
-        $detail_result = mysqli_query($db, $detail_sql);
+        
+        $detail_result = mysqli_query($db, "SELECT SUM(amount) AS total_items FROM detail WHERE id_transaction = '$order_id'");
         $detail_row = mysqli_fetch_assoc($detail_result);
         $row['total_items'] = $detail_row['total_items'] ?? 0;
 
-        // Get order items for preview
-        $items_sql = "SELECT d.amount, p.name, p.price 
-                      FROM detail d 
-                      JOIN product p ON d.id_product = p.id 
-                      WHERE d.id_transaction = '$order_id' 
-                      LIMIT 3";
-        $items_result = mysqli_query($db, $items_sql);
+        $items_result = mysqli_query($db, "SELECT d.amount, p.name, p.price 
+                                          FROM detail d 
+                                          JOIN product p ON d.id_product = p.id 
+                                          WHERE d.id_transaction = '$order_id' 
+                                          LIMIT 3");
         $order_items = [];
         while ($item = mysqli_fetch_assoc($items_result)) {
             $order_items[] = [
@@ -58,18 +47,18 @@ if ($orders_result) {
             ];
         }
         $row['order_items'] = $order_items;
-
         $user_orders[] = $row;
     }
 }
-
-function getStatusBadgeClass($status)
-{
+function getStatusBadgeClass($status) {
     switch (strtolower($status)) {
         case 'pending':
             return 'badge-warning';
         case 'processing':
+        case 'confirmed':
             return 'badge-info';
+        case 'shipped':
+            return 'badge-primary';
         case 'delivered':
         case 'completed':
             return 'badge-success';
@@ -78,6 +67,12 @@ function getStatusBadgeClass($status)
         default:
             return 'badge-secondary';
     }
+}
+function formatCurrency($amount) {
+    return 'Rp ' . number_format($amount, 0, ',', '.');
+}
+function formatDate($date) {
+    return date('d M Y, H:i', strtotime($date));
 }
 
 mysqli_close($db);
@@ -106,7 +101,6 @@ mysqli_close($db);
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/account.css">
 
-    <!-- SweetAlert2 CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 
 </head>
@@ -135,7 +129,6 @@ mysqli_close($db);
             <div class="row justify-content-center">
                 <div class="col-xl-10 ftco-animate">
 
-                    <!-- Order History Tab -->
                     <div class="tab-pane fade show active" id="orders" role="tabpanel">
                         <div class="row">
                             <div class="col-md-12">
@@ -181,7 +174,6 @@ mysqli_close($db);
                                                     </div>
                                                 </div>
 
-                                                <!-- Order Items Preview -->
                                                 <?php if (!empty($order['order_items'])): ?>
                                                     <hr class="my-3">
                                                     <div class="order-items-preview">
@@ -191,7 +183,7 @@ mysqli_close($db);
                                                             $preview_count = 0;
                                                             foreach ($order['order_items'] as $item):
                                                                 if ($preview_count >= 3)
-                                                                    break; // Show max 3 items
+                                                                    break;
                                                                 ?>
                                                                 <div class="col-md-4">
                                                                     <small class="d-block">
@@ -223,7 +215,6 @@ mysqli_close($db);
                                     <?php endforeach; ?>
 
                                 <?php else: ?>
-                                    <!-- Empty State -->
                                     <div class="text-center mt-5">
                                         <i class="fa fa-shopping-bag fa-5x text-muted mb-3"></i>
                                         <h4 class="text-muted">No orders yet</h4>
@@ -269,15 +260,12 @@ mysqli_close($db);
     <script src="js/google-map.js"></script>
     <script src="js/main.js"></script>
 
-    <!-- SweetAlert2 JS -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <script>
         $(document).ready(function () {
-            // Load cart dropdown on page load
             loadCartDropdown();
 
-            // Add to cart functionality
             $('.add-to-cart-btn').click(function (e) {
                 e.preventDefault();
                 var productId = $(this).data('product-id');
@@ -291,7 +279,6 @@ mysqli_close($db);
                     if (data.success) {
                         $('#cart-count').text(data.cart_count);
                         loadCartDropdown();
-                        // Sweet success alert
                         Swal.fire({
                             icon: 'success',
                             title: 'Added to Cart!',
@@ -349,13 +336,10 @@ mysqli_close($db);
         });
 
 
-        // Debug: Check if jQuery is working
         console.log('jQuery version:', $.fn.jquery);
 
-        // Load cart dropdown on page load
         loadCartDropdown();
 
-        // Add to cart functionality
         $('.add-to-cart-btn').click(function (e) {
             e.preventDefault();
             var productId = $(this).data('product-id');
@@ -371,7 +355,6 @@ mysqli_close($db);
                 if (data.success) {
                     $('#cart-count').text(data.cart_count);
                     loadCartDropdown();
-                    // Sweet success alert
                     Swal.fire({
                         icon: 'success',
                         title: 'Added to Cart!',

@@ -2,7 +2,6 @@
 include "config.php";
 session_start();
 
-// Redirect jika sudah login
 if (isset($_SESSION["is_login"])) {
     header("Location: account.php");
     exit();
@@ -59,7 +58,6 @@ if (isset($_POST["sign-up"])) {
             });
         </script>";
     } else {
-        // Check if username or email already exists
         $check_query = "SELECT username, email FROM users WHERE username='$username' OR email='$email'";
         $check_result = mysqli_query($db, $check_query);
         
@@ -95,7 +93,6 @@ if (isset($_POST["sign-up"])) {
                 </script>";
             }
         } else {
-            // Proceed with insertion since no duplicates found
             $sql = "INSERT INTO users (fullname, username, phone, email, address, password) 
                     VALUES ('$fullname', '$username', '$phone', '$email', '$address', '$password')";
             
@@ -172,7 +169,6 @@ $cart_count = count($_SESSION['cart']);
         <link rel="stylesheet" href="css/flaticon.css">
         <link rel="stylesheet" href="css/style.css?v=1.0">
 
-        <!-- SweetAlert2 CSS -->
         <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 
     </head>
@@ -288,10 +284,10 @@ $cart_count = count($_SESSION['cart']);
         <script src="js/scrollax.min.js"></script>
         <script
             src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBVWaKrjvy3MaE7SQ74_uJiULgl1JY0H2s&sensor=false"></script>
-        <script src="js/google-map.js"></script>
-        <script
-            src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.13.1/js/bootstrap-select.min.js"></script>
-        <!-- SweetAlert2 JS -->
+        <script 
+            src="js/google-map.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.13.1/js/bootstrap-select.min.js"></script>
+
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         <script src="js/main.js"></script>
 

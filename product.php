@@ -2,7 +2,6 @@
 session_start();
 include 'config.php';
 
-// Initialize cart and wishlist if they don't exist
 if (!isset($_SESSION['cart'])) {
 	$_SESSION['cart'] = array();
 }
@@ -12,7 +11,6 @@ $page = $_GET['page'] ?? 1;
 $offset = ($page - 1) * $limit;
 
 
-// Get selected category from URL parameter
 $selected_category = isset($_GET['id_category']) ? $_GET['id_category'] : '';
 $selected_category_name = '';
 if (!empty($selected_category)) {
@@ -26,24 +24,19 @@ if (!empty($selected_category)) {
 
 // Build query based on category filter
 if (!empty($selected_category)) {
-	// untuk query produk pakai alias p
 	$where_clause = "WHERE p.id_category = '$selected_category'";
 
-	// untuk query count cukup tanpa alias
 	$count_where_clause = "WHERE id_category = '$selected_category'";
 } else {
 	$where_clause = '';
 	$count_where_clause = '';
 }
 
-
-// Get total products count with filter
 $total_result = mysqli_query($db, "SELECT COUNT(*) AS total FROM product $count_where_clause");
 $total_row = mysqli_fetch_assoc($total_result);
 $total_products = $total_row['total'];
 $total_pages = ceil($total_products / $limit);
 
-// Get products with filter and pagination
 $query = "SELECT p.*, c.category_name 
           FROM product p 
           JOIN category c ON p.id_category = c.id_category 
@@ -51,7 +44,6 @@ $query = "SELECT p.*, c.category_name
           LIMIT $offset, $limit";
 $result = mysqli_query($db, $query);
 
-// Get all categories for sidebar
 $category_query = "SELECT DISTINCT id_category FROM product WHERE id_category IS NOT NULL AND id_category != '' ORDER BY id_category";
 $category_result = mysqli_query($db, $category_query);
 $categories = array();
@@ -59,7 +51,6 @@ while ($cat_row = mysqli_fetch_assoc($category_result)) {
 	$categories[] = $cat_row['id_category'];
 }
 
-// Get category counts for display
 $category_counts = array();
 foreach ($categories as $category) {
 	$count_query = "SELECT COUNT(*) as count FROM product WHERE id_category = '" . mysqli_real_escape_string($db, $category) . "'";
@@ -97,7 +88,6 @@ $cart_count = count($_SESSION['cart']);
 	<link rel="stylesheet" href="css/flaticon.css">
 	<link rel="stylesheet" href="css/style.css">
 
-	<!-- SweetAlert2 CSS -->
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 </head>
 
@@ -134,11 +124,8 @@ $cart_count = count($_SESSION['cart']);
 						</div>
 					</div>
 					<div class="row">
-						<?php
-						if (mysqli_num_rows($result) > 0) {
-							while ($row = mysqli_fetch_array($result)) {
-								$in_wishlist = in_array($row['id'], $_SESSION['wishlist']);
-								?>
+						<?php if (mysqli_num_rows($result) > 0): ?>
+							<?php while ($row = mysqli_fetch_assoc($result)): ?>
 								<div class="col-md-4 d-flex">
 									<div class="product ftco-animate">
 										<div class="img d-flex align-items-center justify-content-center"
@@ -164,8 +151,8 @@ $cart_count = count($_SESSION['cart']);
 										</div>
 									</div>
 								</div>
-							<?php }
-						} else { ?>
+							<?php endwhile; ?>
+						<?php else: ?>
 							<div class="col-md-12 text-center">
 								<div class="alert alert-info">
 									<h4>No products found</h4>
@@ -178,7 +165,7 @@ $cart_count = count($_SESSION['cart']);
 									<?php endif; ?>
 								</div>
 							</div>
-						<?php } ?>
+						<?php endif; ?>
 					</div>
 
 					<?php if ($total_pages > 1): ?>
@@ -273,15 +260,12 @@ $cart_count = count($_SESSION['cart']);
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.13.1/js/bootstrap-select.min.js"></script>
 	<script src="js/main.js"></script>
 
-	<!-- SweetAlert2 JS -->
 	<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 	<script>
 		$(document).ready(function () {
-			// Load cart dropdown on page load
 			loadCartDropdown();
 
-			// Add to cart functionality
 			$('.add-to-cart-btn').click(function (e) {
 				e.preventDefault();
 				var productId = $(this).data('product-id');
@@ -295,7 +279,6 @@ $cart_count = count($_SESSION['cart']);
 					if (data.success) {
 						$('#cart-count').text(data.cart_count);
 						loadCartDropdown();
-						// Sweet success alert for cart
 						Swal.fire({
 							icon: 'success',
 							title: 'Added to Cart!',
@@ -307,62 +290,10 @@ $cart_count = count($_SESSION['cart']);
 							position: 'top-end'
 						});
 					} else {
-						// Sweet error alert for cart
 						Swal.fire({
 							icon: 'error',
 							title: 'Oops...',
 							text: data.message,
-							confirmButtonColor: '#F96D00'
-						});
-					}
-				});
-			});
-
-			// Wishlist functionality
-			$('.wishlist-btn').click(function (e) {
-				e.preventDefault();
-				var productId = $(this).data('product-id');
-				var $this = $(this);
-
-				$.post('wishlist_handler.php', {
-					action: 'toggle_wishlist',
-					product_id: productId
-				}, function (response) {
-					var data = JSON.parse(response);
-					if (data.success) {
-						if (data.in_wishlist) {
-							$this.addClass('in-wishlist');
-							// Sweet success alert for adding to wishlist
-							Swal.fire({
-								icon: 'success',
-								title: 'Added to Wishlist! ❤️',
-								text: data.message,
-								timer: 2000,
-								timerProgressBar: true,
-								showConfirmButton: false,
-								toast: true,
-								position: 'top-end'
-							});
-						} else {
-							$this.removeClass('in-wishlist');
-							// Sweet info alert for removing from wishlist
-							Swal.fire({
-								icon: 'info',
-								title: 'Removed from Wishlist',
-								text: data.message,
-								timer: 2000,
-								timerProgressBar: true,
-								showConfirmButton: false,
-								toast: true,
-								position: 'top-end'
-							});
-						}
-					} else {
-						// Sweet error alert for wishlist
-						Swal.fire({
-							icon: 'error',
-							title: 'Oops...',
-							text: 'Something went wrong with the wishlist!',
 							confirmButtonColor: '#F96D00'
 						});
 					}
@@ -384,7 +315,7 @@ $cart_count = count($_SESSION['cart']);
 								<div class="img" style="background-image: url(images/${item.photo});"></div>
 								<div class="text pl-3">
 									<h4>${item.name}</h4>
-<p class="mb-0"><a href="#" class="price">IDR ${item.price.toLocaleString('id-ID')}</a><span class="quantity ml-3">Quantity: ${item.quantity.toString().padStart(2, '0')}</span></p>								</div>
+										<p class="mb-0"><a href="#" class="price">IDR ${item.price.toLocaleString('id-ID')}</a><span class="quantity ml-3">Quantity: ${item.quantity.toString().padStart(2, '0')}</span></p>								</div>
 							</div>
 						`);
 						});
@@ -401,12 +332,6 @@ $cart_count = count($_SESSION['cart']);
 			}
 		});
 	</script>
-
-	<style>
-		.wishlist-btn.in-wishlist .flaticon-heart {
-			color: red;
-		}
-	</style>
 
 </body>
 

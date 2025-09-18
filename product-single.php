@@ -1,6 +1,6 @@
 <?php
 include 'config.php';
-session_start(); // Add this line - it was missing!
+session_start();
 
 if (isset($_GET['id'])) {
 	$id = intval($_GET['id']);
@@ -10,24 +10,20 @@ if (isset($_GET['id'])) {
 	if ($result && mysqli_num_rows($result) > 0) {
 		$data = mysqli_fetch_assoc($result);
 	} else {
-		echo "Produk tidak ditemukan.";
+		echo "Cannot find Product.";
 		exit;
 	}
 } else {
-	echo "ID produk tidak diberikan.";
+	echo "Cannot give product ID.";
 	exit;
 }
 
-// Initialize cart and wishlist if they don't exist
 if (!isset($_SESSION['cart'])) {
 	$_SESSION['cart'] = array();
 }
-if (!isset($_SESSION['wishlist'])) {
-	$_SESSION['wishlist'] = array();
-}
+
 
 $cart_count = count($_SESSION['cart']);
-$in_wishlist = in_array($data['id'], $_SESSION['wishlist']);
 ?>
 
 <!DOCTYPE html>
@@ -56,7 +52,6 @@ $in_wishlist = in_array($data['id'], $_SESSION['wishlist']);
 	<link rel="stylesheet" href="css/flaticon.css">
 	<link rel="stylesheet" href="css/style.css">
 
-	<!-- SweetAlert2 CSS -->
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 </head>
 
@@ -327,15 +322,12 @@ $in_wishlist = in_array($data['id'], $_SESSION['wishlist']);
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.13.1/js/bootstrap-select.min.js"></script>
 	<script src="js/main.js"></script>
 
-	<!-- SweetAlert2 JS -->
 	<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 	<script>
 		$(document).ready(function () {
-			// Load cart dropdown on page load
 			loadCartDropdown();
 
-			// Quantity controls
 			var quantitiy = 0;
 			$('.quantity-right-plus').click(function (e) {
 				e.preventDefault();
@@ -346,12 +338,11 @@ $in_wishlist = in_array($data['id'], $_SESSION['wishlist']);
 			$('.quantity-left-minus').click(function (e) {
 				e.preventDefault();
 				var quantity = parseInt($('#quantity').val());
-				if (quantity > 1) {  // Changed from 0 to 1 to prevent 0 quantity
+				if (quantity > 1) {
 					$('#quantity').val(quantity - 1);
 				}
 			});
 
-			// Add to cart functionality with quantity support
 			$('.add-to-cart-btn').click(function (e) {
 				e.preventDefault();
 				var productId = $(this).data('product-id');
@@ -366,7 +357,6 @@ $in_wishlist = in_array($data['id'], $_SESSION['wishlist']);
 					if (data.success) {
 						$('#cart-count').text(data.cart_count);
 						loadCartDropdown();
-						// Sweet success alert for cart
 						Swal.fire({
 							icon: 'success',
 							title: 'Added to Cart!',
@@ -378,7 +368,6 @@ $in_wishlist = in_array($data['id'], $_SESSION['wishlist']);
 							position: 'top-end'
 						});
 					} else {
-						// Sweet error alert for cart
 						Swal.fire({
 							icon: 'error',
 							title: 'Oops...',
@@ -425,13 +414,6 @@ $in_wishlist = in_array($data['id'], $_SESSION['wishlist']);
 			}
 		});
 	</script>
-
-	<style>
-		.wishlist-btn.in-wishlist .flaticon-heart {
-			color: red;
-		}
-	</style>
-
 </body>
 
 </html>

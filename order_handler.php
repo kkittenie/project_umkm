@@ -4,7 +4,6 @@ include 'config.php';
 
 header('Content-Type: application/json');
 
-// Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
     echo json_encode(['success' => false, 'message' => 'User not logged in']);
     exit();
@@ -13,7 +12,6 @@ if (!isset($_SESSION['user_id'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'place_order') {
     $user_id = $_SESSION['user_id'];
     
-    // Get form data
     $billing = $_POST['billing'];
     $payment_method = $_POST['payment_method'];
     $cart_items = json_decode($_POST['cart_items'], true);
@@ -21,7 +19,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $discount = floatval($_POST['discount']);
     $total = floatval($_POST['total']);
 
-    // Validate required fields
     if (empty($billing['firstname']) || empty($billing['lastname']) || 
         empty($billing['streetaddress']) || empty($billing['phone']) || 
         empty($billing['email']) || empty($payment_method)) {
@@ -34,11 +31,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         exit();
     }
 
-    // Start database transaction
     mysqli_autocommit($db, false);
     
     try {
-        // Insert into transaction table
         $sql_transaction = "INSERT INTO transaction (id_user, date, total_price, payment_method) 
                            VALUES (?, NOW(), ?, ?)";
         $stmt = mysqli_prepare($db, $sql_transaction);
@@ -54,12 +49,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
         $transaction_id = mysqli_insert_id($db);
 
-        // Insert each cart item into detail table and update stock
         foreach ($cart_items as $item) {
             $product_id = intval($item['id']);
             $quantity = intval($item['quantity']);
 
-            // Check current stock first
             $check_stock_sql = "SELECT stock FROM product WHERE id = ?";
             $stmt_check = mysqli_prepare($db, $check_stock_sql);
             mysqli_stmt_bind_param($stmt_check, "i", $product_id);
@@ -75,7 +68,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 throw new Exception("Insufficient stock for product ID: " . $product_id);
             }
 
-            // Insert into detail table
             $sql_detail = "INSERT INTO detail (id_transaction, id_product, amount) 
                           VALUES (?, ?, ?)";
             $stmt_detail = mysqli_prepare($db, $sql_detail);
@@ -89,7 +81,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 throw new Exception("Error inserting detail: " . mysqli_stmt_error($stmt_detail));
             }
 
-            // Update product stock
             $sql_stock = "UPDATE product SET stock = stock - ? WHERE id = ?";
             $stmt_stock = mysqli_prepare($db, $sql_stock);
             if (!$stmt_stock) {
@@ -103,10 +94,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             }
         }
 
-        // Commit transaction
         mysqli_commit($db);
         
-        // Clear cart
         $_SESSION['cart'] = [];
         
         echo json_encode([
@@ -117,7 +106,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         ]);
         
     } catch (Exception $e) {
-        // Rollback transaction on error
         mysqli_rollback($db);
         
         echo json_encode([
@@ -126,7 +114,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         ]);
     }
     
-    // Turn autocommit back on
     mysqli_autocommit($db, true);
 } else {
     echo json_encode(['success' => false, 'message' => 'Invalid request']);

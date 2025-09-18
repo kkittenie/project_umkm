@@ -5,85 +5,56 @@ session_start();
 //   header('Location: login.php');
 // }
 
-// Get current page
 $current_page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
 
-// Handle customer operations
 if ($current_page === 'customers') {
   $action = $_GET['action'] ?? '';
 
-  // Handle customer deletion
   if ($action === 'delete' && isset($_GET['id'])) {
     $customer_id = (int) $_GET['id'];
 
-    // Check if customer has transactions
-    $check_transactions = $db->prepare("SELECT COUNT(*) as count FROM transaction WHERE id_user = ?");
-    $check_transactions->bind_param("i", $customer_id);
-    $check_transactions->execute();
-    $result = $check_transactions->get_result();
-    $transaction_count = $result->fetch_assoc()['count'];
+    $check_transactions = mysqli_query($db, "SELECT COUNT(*) as count FROM transaction WHERE id_user = $customer_id");
+    $transaction_count = mysqli_fetch_assoc($check_transactions)['count'];
 
     if ($transaction_count > 0) {
       $_SESSION['error'] = "Cannot delete customer with existing orders. Customer has $transaction_count order(s).";
     } else {
-      $stmt = $db->prepare("DELETE FROM users WHERE id = ? AND role = 'user'");
-      $stmt->bind_param("i", $customer_id);
-
-      if ($stmt->execute()) {
-        if ($stmt->affected_rows > 0) {
-          $_SESSION['alert'] = "Customer deleted successfully!";
-        } else {
-          $_SESSION['error'] = "Customer not found or cannot be deleted.";
-        }
+      $result = mysqli_query($db, "DELETE FROM users WHERE id = $customer_id AND role = 'user'");
+      if ($result && mysqli_affected_rows($db) > 0) {
+        $_SESSION['alert'] = "Customer deleted successfully!";
       } else {
-        $_SESSION['error'] = "Error deleting customer: " . $stmt->error;
+        $_SESSION['error'] = "Customer not found or cannot be deleted.";
       }
-      $stmt->close();
     }
-    $check_transactions->close();
     header("Location: dashboard.php?page=customers");
     exit;
   }
 
-  // Handle password reset
   if ($action === 'reset_password' && isset($_GET['id'])) {
     $customer_id = (int) $_GET['id'];
 
-    // Generate a new random password
     $new_password = 'reset_' . bin2hex(random_bytes(4)); 
-    $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
 
-    $stmt = $db->prepare("UPDATE users SET password = ? WHERE id = ? AND role = 'user'");
-    $stmt->bind_param("si", $hashed_password, $customer_id);
+    $result = mysqli_query($db, "UPDATE users SET password = '$new_password' WHERE id = $customer_id AND role = 'user'");
 
-    if ($stmt->execute()) {
-      if ($stmt->affected_rows > 0) {
-        $_SESSION['alert'] = "Password reset successfully! New password: $new_password";
-        $_SESSION['reset_password'] = $new_password; // Store for display
-      } else {
-        $_SESSION['error'] = "Customer not found or password reset failed.";
-      }
+    if ($result && mysqli_affected_rows($db) > 0) {
+      $_SESSION['alert'] = "Password reset successfully! New password: $new_password";
+      $_SESSION['reset_password'] = $new_password;
     } else {
-      $_SESSION['error'] = "Error resetting password: " . $stmt->error;
+      $_SESSION['error'] = "Customer not found or password reset failed.";
     }
-    $stmt->close();
     header("Location: dashboard.php?page=customers");
     exit;
   }
 
-  // Handle customer status toggle (if you want to add active/inactive feature)
   if ($action === 'toggle_status' && isset($_GET['id'])) {
     $customer_id = (int) $_GET['id'];
-
-    // For now, we'll just redirect back since there's no status field in the current schema
-    // You can add a status field to users table if needed
     $_SESSION['alert'] = "Customer status updated!";
     header("Location: dashboard.php?page=customers");
     exit;
   }
 }
 
-// Handle bulk password reset form
 if (isset($_POST['bulk_password_reset']) && $current_page === 'customers') {
   if (isset($_POST['customer_ids']) && is_array($_POST['customer_ids'])) {
     $reset_results = [];
@@ -91,21 +62,15 @@ if (isset($_POST['bulk_password_reset']) && $current_page === 'customers') {
     foreach ($_POST['customer_ids'] as $customer_id) {
       $customer_id = (int) $customer_id;
 
-      // Get customer name for results
-      $name_stmt = $db->prepare("SELECT fullname FROM users WHERE id = ? AND role = 'user'");
-      $name_stmt->bind_param("i", $customer_id);
-      $name_stmt->execute();
-      $name_result = $name_stmt->get_result();
-      $customer = $name_result->fetch_assoc();
+      $name_result = mysqli_query($db, "SELECT fullname FROM users WHERE id = $customer_id AND role = 'user'");
+      $customer = mysqli_fetch_assoc($name_result);
 
       if ($customer) {
         $new_password = 'reset_' . bin2hex(random_bytes(4));
-        $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
 
-        $stmt = $db->prepare("UPDATE users SET password = ? WHERE id = ? AND role = 'user'");
-        $stmt->bind_param("si", $hashed_password, $customer_id);
+        $result = mysqli_query($db, "UPDATE users SET password = '$new_password' WHERE id = $customer_id AND role = 'user'");
 
-        if ($stmt->execute() && $stmt->affected_rows > 0) {
+        if ($result && mysqli_affected_rows($db) > 0) {
           $reset_results[] = [
             'name' => $customer['fullname'],
             'password' => $new_password,
@@ -117,9 +82,7 @@ if (isset($_POST['bulk_password_reset']) && $current_page === 'customers') {
             'success' => false
           ];
         }
-        $stmt->close();
       }
-      $name_stmt->close();
     }
 
     $_SESSION['bulk_reset_results'] = $reset_results;
@@ -131,7 +94,6 @@ if (isset($_POST['bulk_password_reset']) && $current_page === 'customers') {
   }
 }
 
-// Handle order status updates
 if (isset($_POST['update_order_status'])) {
   $transaction_id = (int) $_POST['order_id'];
   $new_status = $_POST['new_status'];
@@ -139,130 +101,97 @@ if (isset($_POST['update_order_status'])) {
   $allowed_statuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
 
   if (in_array($new_status, $allowed_statuses)) {
-    // Check if status column exists
-    $check_column = $db->query("SHOW COLUMNS FROM transaction LIKE 'status'");
-    if ($check_column->num_rows == 0) {
-      $_SESSION['error'] = "Status column does not exist in transaction table";
+    $result = mysqli_query($db, "UPDATE transaction SET status = '$new_status' WHERE id_transaction = $transaction_id");
+    
+    if ($result && mysqli_affected_rows($db) > 0) {
+      $_SESSION['alert'] = "Order #$transaction_id status updated to " . ucfirst($new_status);
     } else {
-      $stmt = $db->prepare("UPDATE transaction SET status = ? WHERE id_transaction = ?");
-      if ($stmt) {
-        $stmt->bind_param("si", $new_status, $transaction_id);
-
-        if ($stmt->execute()) {
-          if ($stmt->affected_rows > 0) {
-            $_SESSION['alert'] = "Order #$transaction_id status updated to " . ucfirst($new_status);
-          } else {
-            $_SESSION['error'] = "No transaction found with ID $transaction_id";
-          }
-        } else {
-          $_SESSION['error'] = "Failed to update order status: " . $stmt->error;
-        }
-        $stmt->close();
-      } else {
-        $_SESSION['error'] = "Failed to prepare statement: " . $db->error;
-      }
+      $_SESSION['error'] = "No transaction found with ID $transaction_id";
     }
   } else {
     $_SESSION['error'] = "Invalid status: $new_status";
   }
 }
 
-// Fetch customers for customers page
 $customers = [];
 if ($current_page === 'customers') {
   $search = isset($_GET['search']) ? $_GET['search'] : '';
 
   if (!empty($search)) {
-    $sql = "SELECT u.*, 
-                       COUNT(t.id_transaction) as total_orders, 
-                       COALESCE(SUM(t.total_price), 0) as total_spent,
-                       MAX(t.date) as last_order_date
-                FROM users u 
-                LEFT JOIN transaction t ON u.id = t.id_user 
-                WHERE u.role = 'user' 
-                AND (u.fullname LIKE ? OR u.email LIKE ? OR u.username LIKE ?)
-                GROUP BY u.id 
-                ORDER BY u.id DESC";
     $search_term = "%$search%";
-    $stmt = $db->prepare($sql);
-    $stmt->bind_param("sss", $search_term, $search_term, $search_term);
-    $stmt->execute();
-    $result = $stmt->get_result();
+    $sql = "SELECT u.*, 
+                   COUNT(t.id_transaction) as total_orders, 
+                   COALESCE(SUM(t.total_price), 0) as total_spent,
+                   MAX(t.date) as last_order_date
+            FROM users u 
+            LEFT JOIN transaction t ON u.id = t.id_user 
+            WHERE u.role = 'user' 
+            AND (u.fullname LIKE '$search_term' OR u.email LIKE '$search_term' OR u.username LIKE '$search_term')
+            GROUP BY u.id 
+            ORDER BY u.id DESC";
   } else {
     $sql = "SELECT u.*, 
-                       COUNT(t.id_transaction) as total_orders, 
-                       COALESCE(SUM(t.total_price), 0) as total_spent,
-                       MAX(t.date) as last_order_date
-                FROM users u 
-                LEFT JOIN transaction t ON u.id = t.id_user 
-                WHERE u.role = 'user' 
-                GROUP BY u.id 
-                ORDER BY u.id DESC";
-    $result = mysqli_query($db, $sql);
+                   COUNT(t.id_transaction) as total_orders, 
+                   COALESCE(SUM(t.total_price), 0) as total_spent,
+                   MAX(t.date) as last_order_date
+            FROM users u 
+            LEFT JOIN transaction t ON u.id = t.id_user 
+            WHERE u.role = 'user' 
+            GROUP BY u.id 
+            ORDER BY u.id DESC";
   }
-
+  
+  $result = mysqli_query($db, $sql);
   while ($row = mysqli_fetch_assoc($result)) {
     $customers[] = $row;
   }
 }
 
-// Fetch transactions for orders page
 $transactions = [];
 if ($current_page === 'orders') {
   $status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
 
   if ($status_filter === 'all') {
     $sql = "SELECT t.*, u.fullname, u.email, u.phone, u.address 
-                FROM transaction t 
-                JOIN users u ON t.id_user = u.id 
-                ORDER BY t.date DESC";
-    $result = mysqli_query($db, $sql);
+            FROM transaction t 
+            JOIN users u ON t.id_user = u.id 
+            ORDER BY t.date DESC";
   } else {
     $sql = "SELECT t.*, u.fullname, u.email, u.phone, u.address 
-                FROM transaction t 
-                JOIN users u ON t.id_user = u.id 
-                WHERE t.status = ? 
-                ORDER BY t.date DESC";
-    $stmt = $db->prepare($sql);
-    $stmt->bind_param("s", $status_filter);
-    $stmt->execute();
-    $result = $stmt->get_result();
+            FROM transaction t 
+            JOIN users u ON t.id_user = u.id 
+            WHERE t.status = '$status_filter' 
+            ORDER BY t.date DESC";
   }
-
+  
+  $result = mysqli_query($db, $sql);
   while ($row = mysqli_fetch_assoc($result)) {
     $transactions[] = $row;
   }
 }
 
-// Dashboard statistics
 $stats = [];
 if ($current_page === 'dashboard') {
-  // Get transaction counts by status
-  $result = $db->query("SELECT status, COUNT(*) as count FROM transaction GROUP BY status");
-  while ($row = $result->fetch_assoc()) {
+  $result = mysqli_query($db, "SELECT status, COUNT(*) as count FROM transaction GROUP BY status");
+  while ($row = mysqli_fetch_assoc($result)) {
     $stats[$row['status']] = $row['count'];
   }
 
-  // Get total revenue
-  $result = $db->query("SELECT SUM(total_price) as total_revenue FROM transaction WHERE status IN ('confirmed', 'processing', 'shipped', 'delivered')");
-  $revenue_row = $result->fetch_assoc();
+  $result = mysqli_query($db, "SELECT SUM(total_price) as total_revenue FROM transaction WHERE status IN ('confirmed', 'processing', 'shipped', 'delivered')");
+  $revenue_row = mysqli_fetch_assoc($result);
   $stats['total_revenue'] = $revenue_row['total_revenue'] ?? 0;
 
-  // Get today's orders
-  $result = $db->query("SELECT COUNT(*) as today_orders FROM transaction WHERE DATE(date) = CURDATE()");
-  $today_row = $result->fetch_assoc();
+  $result = mysqli_query($db, "SELECT COUNT(*) as today_orders FROM transaction WHERE DATE(date) = CURDATE()");
+  $today_row = mysqli_fetch_assoc($result);
   $stats['today_orders'] = $today_row['today_orders'] ?? 0;
 
-  // Get total customers
-  $result = $db->query("SELECT COUNT(*) as total_customers FROM users WHERE role = 'user'");
-  $customer_row = $result->fetch_assoc();
+  $result = mysqli_query($db, "SELECT COUNT(*) as total_customers FROM users WHERE role = 'user'");
+  $customer_row = mysqli_fetch_assoc($result);
   $stats['total_customers'] = $customer_row['total_customers'] ?? 0;
 }
 
-// Handle product operations - FIXED VERSION
 $action = $_GET['action'] ?? '';
 
-// Initialize variables for edit form
 $name = '';
 $price = '';
 $stock = '';
@@ -272,12 +201,9 @@ $description = '';
 
 if ($action == "edit" && $current_page === 'products') {
   $id = (int)$_GET['id'];
-  $stmt = $db->prepare("SELECT * FROM product WHERE id = ?");
-  $stmt->bind_param("i", $id);
-  $stmt->execute();
-  $result = $stmt->get_result();
+  $result = mysqli_query($db, "SELECT * FROM product WHERE id = $id");
   
-  if ($row = $result->fetch_assoc()) {
+  if ($row = mysqli_fetch_assoc($result)) {
     $name = $row['name'];
     $price = $row['price'];
     $stock = $row['stock'];
@@ -289,179 +215,133 @@ if ($action == "edit" && $current_page === 'products') {
     header("Location: dashboard.php?page=products");
     exit;
   }
-  $stmt->close();
 }
 
-// Handle product form submission - SECURE VERSION
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['product_action'])) {
-  $name = trim($_POST['name']);
+  $name = mysqli_real_escape_string($db, trim($_POST['name']));
   $price = (float)$_POST['price'];
   $stock = (int)$_POST['stock'];
   $category = (int)$_POST['category'];
-  $description = trim($_POST['description']);
+  $description = mysqli_real_escape_string($db, trim($_POST['description']));
   
-  // Validate inputs
   if (empty($name) || $price < 0 || $stock < 0 || $category <= 0) {
     $_SESSION['error'] = 'Please fill all fields with valid values.';
     header("Location: dashboard.php?page=products");
     exit;
   }
 
+  $photo_uploaded = false;
+  if (!empty($_FILES['photo']['name'])) {
+    $allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/jpg'];
+    $file_info = pathinfo($_FILES['photo']['name']);
+    $file_extension = strtolower($file_info['extension']);
+    
+    if (in_array('image/' . $file_extension, $allowed_types) || in_array($file_extension, ['jpg', 'jpeg', 'png', 'gif'])) {
+      $photo = time() . '_' . uniqid() . '.' . $file_extension;
+      $upload_path = "../images/" . $photo;
+      
+      if (!is_dir("../images/")) {
+        mkdir("../images/", 0755, true);
+      }
+      
+      if (move_uploaded_file($_FILES['photo']['tmp_name'], $upload_path)) {
+        $photo_uploaded = true;
+      } else {
+        $_SESSION['error'] = 'Failed to upload image. Check folder permissions.';
+        header("Location: dashboard.php?page=products");
+        exit;
+      }
+    } else {
+      $_SESSION['error'] = 'Only JPG, JPEG, PNG and GIF files are allowed.';
+      header("Location: dashboard.php?page=products");
+      exit;
+    }
+  }
+
   if ($action == "edit") {
     $id = (int)$_GET['id'];
 
-    if (!empty($_FILES['photo']['name'])) {
-      // Validate file upload
-      $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
-      $file_type = $_FILES['photo']['type'];
-      
-      if (!in_array($file_type, $allowed_types)) {
-        $_SESSION['error'] = 'Only JPG, PNG and GIF files are allowed.';
-        header("Location: dashboard.php?page=products");
-        exit;
-      }
-      
-      $photo = uniqid() . '_' . basename($_FILES['photo']['name']);
-      $path = "../images/" . $photo;
-      $file_tmp = $_FILES['photo']['tmp_name'];
-      
-      if (!move_uploaded_file($file_tmp, $path)) {
-        $_SESSION['error'] = 'Failed to upload image.';
-        header("Location: dashboard.php?page=products");
-        exit;
-      }
-    } else {
-      // Keep existing photo
-      $stmt = $db->prepare("SELECT photo FROM product WHERE id = ?");
-      $stmt->bind_param("i", $id);
-      $stmt->execute();
-      $result = $stmt->get_result();
-      $row = $result->fetch_assoc();
+    if (!$photo_uploaded) {
+      $result = mysqli_query($db, "SELECT photo FROM product WHERE id = $id");
+      $row = mysqli_fetch_assoc($result);
       $photo = $row['photo'];
-      $stmt->close();
     }
 
-    $stmt = $db->prepare("UPDATE product SET name=?, price=?, stock=?, photo=?, id_category=?, description=? WHERE id=?");
-    $stmt->bind_param("sdisssi", $name, $price, $stock, $photo, $category, $description, $id);
+    $query = "UPDATE product SET name='$name', price=$price, stock=$stock, photo='$photo', id_category=$category, description='$description' WHERE id=$id";
+    $result = mysqli_query($db, $query);
     
-    if ($stmt->execute()) {
+    if ($result) {
       $_SESSION['alert'] = 'Product updated successfully!';
     } else {
-      $_SESSION['error'] = 'Error updating product: ' . $stmt->error;
+      $_SESSION['error'] = 'Error updating product: ' . mysqli_error($db);
     }
-    $stmt->close();
     
   } else {
-    // Add new product
-    if (empty($_FILES['photo']['name'])) {
-      $_SESSION['error'] = 'Product image is required.';
-      header("Location: dashboard.php?page=products");
-      exit;
-    }
-    
-    // Validate file upload
-    $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
-    $file_type = $_FILES['photo']['type'];
-    
-    if (!in_array($file_type, $allowed_types)) {
-      $_SESSION['error'] = 'Only JPG, PNG and GIF files are allowed.';
-      header("Location: dashboard.php?page=products");
-      exit;
-    }
-    
-    $photo = uniqid() . '_' . basename($_FILES['photo']['name']);
-    $path = "../images/" . $photo;
-    $file_tmp = $_FILES['photo']['tmp_name'];
-    
-    if (!move_uploaded_file($file_tmp, $path)) {
-      $_SESSION['error'] = 'Failed to upload image.';
+    if (!$photo_uploaded) {
+      $_SESSION['error'] = 'Product image is required for new products.';
       header("Location: dashboard.php?page=products");
       exit;
     }
 
-    $stmt = $db->prepare("INSERT INTO product (name, price, stock, photo, id_category, description) VALUES (?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("sdiiss", $name, $price, $stock, $photo, $category, $description);
+    $query = "INSERT INTO product (name, price, stock, photo, id_category, description) VALUES ('$name', $price, $stock, '$photo', $category, '$description')";
+    $result = mysqli_query($db, $query);
     
-    if ($stmt->execute()) {
+    if ($result) {
       $_SESSION['alert'] = 'Product added successfully!';
     } else {
-      $_SESSION['error'] = 'Error adding product: ' . $stmt->error;
+      $_SESSION['error'] = 'Error adding product: ' . mysqli_error($db);
     }
-    $stmt->close();
   }
   
   header("Location: dashboard.php?page=products");
   exit;
 }
 
-// Handle product deletion - FIXED VERSION
 if ($action == "delete" && $current_page === 'products') {
   $id = (int)$_GET['id'];
   
-  // Check if product has associated detail records
-  $check_details = $db->prepare("SELECT COUNT(*) as count FROM detail WHERE id_product = ?");
-  $check_details->bind_param("i", $id);
-  $check_details->execute();
-  $result = $check_details->get_result();
-  $detail_count = $result->fetch_assoc()['count'];
+  $check_details = mysqli_query($db, "SELECT COUNT(*) as count FROM detail WHERE id_product = $id");
+  $detail_count = mysqli_fetch_assoc($check_details)['count'];
   
   if ($detail_count > 0) {
     $_SESSION['error'] = "Cannot delete product. This product is referenced in $detail_count order detail(s). Consider marking it as inactive instead.";
   } else {
-    // Safe to delete - no foreign key references
-    $stmt = $db->prepare("DELETE FROM product WHERE id = ?");
-    $stmt->bind_param("i", $id);
+    $result = mysqli_query($db, "DELETE FROM product WHERE id = $id");
     
-    if ($stmt->execute()) {
-      if ($stmt->affected_rows > 0) {
-        $_SESSION['alert'] = 'Product deleted successfully!';
-      } else {
-        $_SESSION['error'] = 'Product not found or already deleted.';
-      }
+    if ($result && mysqli_affected_rows($db) > 0) {
+      $_SESSION['alert'] = 'Product deleted successfully!';
     } else {
-      $_SESSION['error'] = 'Error deleting product: ' . $stmt->error;
+      $_SESSION['error'] = 'Product not found or already deleted.';
     }
-    $stmt->close();
   }
   
-  $check_details->close();
   header("Location: dashboard.php?page=products");
   exit;
 }
 
-// Optional: Handle product status toggle (if you add status column)
 if ($action == "toggle_status" && $current_page === 'products') {
   $id = (int)$_GET['id'];
   
-  // Check if status column exists
-  $check_column = $db->query("SHOW COLUMNS FROM product LIKE 'status'");
+  $check_column = mysqli_query($db, "SHOW COLUMNS FROM product LIKE 'status'");
   
-  if ($check_column->num_rows > 0) {
-    // Get current status
-    $stmt = $db->prepare("SELECT status FROM product WHERE id = ?");
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $product = $result->fetch_assoc();
+  if (mysqli_num_rows($check_column) > 0) {
+    $result = mysqli_query($db, "SELECT status FROM product WHERE id = $id");
+    $product = mysqli_fetch_assoc($result);
     
     if ($product) {
       $new_status = ($product['status'] == 'active') ? 'inactive' : 'active';
       
-      $update_stmt = $db->prepare("UPDATE product SET status = ? WHERE id = ?");
-      $update_stmt->bind_param("si", $new_status, $id);
+      $update_result = mysqli_query($db, "UPDATE product SET status = '$new_status' WHERE id = $id");
       
-      if ($update_stmt->execute()) {
+      if ($update_result) {
         $status_text = ($new_status == 'active') ? 'activated' : 'deactivated';
         $_SESSION['alert'] = "Product $status_text successfully!";
       } else {
-        $_SESSION['error'] = 'Error updating product status: ' . $update_stmt->error;
+        $_SESSION['error'] = 'Error updating product status: ' . mysqli_error($db);
       }
-      $update_stmt->close();
     } else {
       $_SESSION['error'] = 'Product not found.';
     }
-    
-    $stmt->close();
   } else {
     $_SESSION['error'] = 'Status functionality not available. Please add status column to product table.';
   }
@@ -882,7 +762,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
       <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
 
         <?php if ($current_page === 'dashboard'): ?>
-          <!-- Dashboard Page -->
           <div class="page-header">
             <div class="container-fluid">
               <h1 class="page-title">Dashboard</h1>
@@ -895,7 +774,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
           </div>
 
           <div class="container-fluid">
-            <!-- Statistics Cards -->
             <div class="row mb-4">
               <div class="col-md-3 mb-3">
                 <div class="stat-card">
@@ -935,7 +813,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
               </div>
             </div>
 
-            <!-- Quick Actions -->
             <div class="row">
               <div class="col-12">
                 <div class="stat-card">
@@ -960,7 +837,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
           </div>
 
         <?php elseif ($current_page === 'customers'): ?>
-          <!-- Customer Management Page -->
           <div class="page-header">
             <div class="container-fluid">
               <h1 class="page-title">Customer Management</h1>
@@ -974,7 +850,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
           </div>
 
           <div class="container-fluid">
-            <!-- Search Section -->
             <div class="search-section">
               <div class="row align-items-center">
                 <div class="col-md-6">
@@ -999,7 +874,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
                 </div>
               </div>
 
-              <!-- Bulk Actions -->
               <?php if (!empty($customers)): ?>
                 <div class="row mt-3">
                   <div class="col-12">
@@ -1020,7 +894,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
               <?php endif; ?>
             </div>
 
-            <!-- Customers List -->
             <?php if (empty($customers)): ?>
               <div class="stat-card text-center py-5">
                 <i class="fas fa-users fa-3x text-muted mb-3"></i>
@@ -1152,7 +1025,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
           </div>
 
         <?php elseif ($current_page === 'orders'): ?>
-          <!-- Orders Management Page -->
           <div class="page-header">
             <div class="container-fluid">
               <h1 class="page-title">Orders Management</h1>
@@ -1166,7 +1038,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
           </div>
 
           <div class="container-fluid">
-            <!-- Filters -->
             <div class="filter-section">
               <div class="row align-items-center">
                 <div class="col-md-6">
@@ -1191,7 +1062,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
               </div>
             </div>
 
-            <!-- Orders List -->
             <?php if (empty($transactions)): ?>
               <div class="stat-card text-center py-5">
                 <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
@@ -1201,7 +1071,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
             <?php else: ?>
               <?php foreach ($transactions as $transaction): ?>
                 <?php
-                // Fetch transaction items
                 $sql_details = "SELECT d.*, p.name, p.price, p.photo 
                                FROM detail d 
                                JOIN product p ON d.id_product = p.id 
@@ -1317,7 +1186,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
                         </div>
                       </div>
 
-                      <!-- Order Actions -->
                       <div class="row mt-4 pt-3 border-top">
                         <div class="col-md-6">
                           <form method="POST" class="d-flex align-items-center gap-2">
@@ -1353,7 +1221,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
           </div>
 
         <?php elseif ($current_page === 'products'): ?>
-          <!-- Products Management Page -->
           <div class="page-header">
             <div class="container-fluid">
               <h1 class="page-title">Products Management</h1>
@@ -1523,16 +1390,13 @@ if ($action == "toggle_status" && $current_page === 'products') {
   <script src="https://cdn.jsdelivr.net/npm/feather-icons@4.28.0/dist/feather.min.js"></script>
 
   <script>
-    // Initialize feather icons
     feather.replace();
 
-    // Filter orders function
     function filterOrders() {
       var status = document.getElementById('status-filter').value;
       window.location.href = 'dashboard.php?page=orders&status=' + status;
     }
 
-    // Customer delete confirmation function
     function confirmDeleteCustomer(customerId, customerName) {
       Swal.fire({
         title: 'Delete Customer?',
@@ -1545,7 +1409,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
         cancelButtonText: 'Cancel'
       }).then((result) => {
         if (result.isConfirmed) {
-          // Show loading message
           Swal.fire({
             title: 'Deleting customer...',
             allowOutsideClick: false,
@@ -1554,13 +1417,11 @@ if ($action == "toggle_status" && $current_page === 'products') {
             }
           });
 
-          // Redirect to delete URL
           window.location.href = `dashboard.php?page=customers&action=delete&id=${customerId}`;
         }
       });
     }
 
-    // Password reset confirmation function
     function resetCustomerPassword(customerId, customerName) {
       Swal.fire({
         title: 'Reset Password?',
@@ -1574,7 +1435,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
         cancelButtonText: 'Cancel'
       }).then((result) => {
         if (result.isConfirmed) {
-          // Show loading message
           Swal.fire({
             title: 'Resetting password...',
             allowOutsideClick: false,
@@ -1583,13 +1443,11 @@ if ($action == "toggle_status" && $current_page === 'products') {
             }
           });
 
-          // Redirect to reset URL
           window.location.href = `dashboard.php?page=customers&action=reset_password&id=${customerId}`;
         }
       });
     }
 
-    // Bulk actions functionality
     function toggleSelectAll() {
       const checkboxes = document.querySelectorAll('.customer-checkbox');
       const allChecked = Array.from(checkboxes).every(cb => cb.checked);
@@ -1645,7 +1503,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
         cancelButtonText: 'Cancel'
       }).then((result) => {
         if (result.isConfirmed) {
-          // Show loading message
           Swal.fire({
             title: 'Resetting passwords...',
             html: 'Please wait while passwords are being reset...',
@@ -1655,12 +1512,10 @@ if ($action == "toggle_status" && $current_page === 'products') {
             }
           });
 
-          // Create form and submit
           const form = document.createElement('form');
           form.method = 'POST';
           form.style.display = 'none';
 
-          // Add selected customer IDs
           selectedCheckboxes.forEach(cb => {
             const input = document.createElement('input');
             input.type = 'hidden';
@@ -1669,7 +1524,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
             form.appendChild(input);
           });
 
-          // Add bulk reset flag
           const bulkInput = document.createElement('input');
           bulkInput.type = 'hidden';
           bulkInput.name = 'bulk_password_reset';
@@ -1682,7 +1536,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
       });
     }
 
-    // Product delete confirmation
     document.querySelectorAll('.btn-delete').forEach(function (button) {
       button.addEventListener('click', function (e) {
         e.preventDefault();
@@ -1705,9 +1558,7 @@ if ($action == "toggle_status" && $current_page === 'products') {
       });
     });
 
-    // Enhanced functionality
     document.addEventListener('DOMContentLoaded', function () {
-      // Search functionality enhancement
       const searchInput = document.querySelector('input[name="search"]');
       if (searchInput) {
         searchInput.addEventListener('keypress', function (e) {
@@ -1718,7 +1569,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
         });
       }
 
-      // Enhanced hover effects for stat cards
       document.querySelectorAll('.stat-card').forEach(function (card) {
         card.addEventListener('mouseenter', function () {
           this.style.transform = 'translateY(-4px)';
@@ -1731,7 +1581,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
     });
   </script>
 
-  <!-- Success/Error Alerts -->
   <?php if (isset($_SESSION['alert'])): ?>
     <script>
       Swal.fire({
@@ -1806,7 +1655,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
             position: 'top-end'
           });
         }).catch(() => {
-          // Fallback for older browsers
           const textArea = document.createElement('textarea');
           textArea.value = text;
           document.body.appendChild(textArea);
@@ -1914,7 +1762,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
             position: 'top-end'
           });
         }).catch(() => {
-          // Fallback for older browsers
           const textArea = document.createElement('textarea');
           textArea.value = text;
           document.body.appendChild(textArea);
@@ -1935,7 +1782,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
         });
       }
 
-      // Enhanced CSS for the bulk reset results
       const style = document.createElement('style');
       style.textContent = `
         .swal-wide {
@@ -1964,9 +1810,7 @@ if ($action == "toggle_status" && $current_page === 'products') {
   <?php endif; ?>
 
   <script>
-    // Enhanced confirmation dialogs with consistent styling
 
-    // Customer delete confirmation function
     function confirmDeleteCustomer(customerId, customerName) {
       Swal.fire({
         title: 'Delete Customer?',
@@ -1988,7 +1832,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
         buttonsStyling: false
       }).then((result) => {
         if (result.isConfirmed) {
-          // Show loading with custom styling
           Swal.fire({
             title: 'Deleting customer...',
             html: '<div class="text-center"><i class="fas fa-spinner fa-spin fa-2x text-danger mb-3"></i><br>Please wait while we delete the customer.</div>',
@@ -1999,13 +1842,11 @@ if ($action == "toggle_status" && $current_page === 'products') {
             }
           });
 
-          // Redirect to delete URL
           window.location.href = `dashboard.php?page=customers&action=delete&id=${customerId}`;
         }
       });
     }
 
-    // Password reset confirmation function
     function resetCustomerPassword(customerId, customerName) {
       Swal.fire({
         title: 'Reset Password?',
@@ -2027,7 +1868,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
         buttonsStyling: false
       }).then((result) => {
         if (result.isConfirmed) {
-          // Show loading with custom styling
           Swal.fire({
             title: 'Resetting password...',
             html: '<div class="text-center"><i class="fas fa-spinner fa-spin fa-2x text-warning mb-3"></i><br>Please wait while we generate a new password.</div>',
@@ -2038,13 +1878,11 @@ if ($action == "toggle_status" && $current_page === 'products') {
             }
           });
 
-          // Redirect to reset URL
           window.location.href = `dashboard.php?page=customers&action=reset_password&id=${customerId}`;
         }
       });
     }
 
-    // Bulk password reset function
     function bulkResetPassword() {
       const selectedCheckboxes = document.querySelectorAll('.customer-checkbox:checked');
       const selectedCount = selectedCheckboxes.length;
@@ -2084,7 +1922,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
         buttonsStyling: false
       }).then((result) => {
         if (result.isConfirmed) {
-          // Show enhanced loading message
           Swal.fire({
             title: 'Resetting passwords...',
             html: `
@@ -2104,12 +1941,10 @@ if ($action == "toggle_status" && $current_page === 'products') {
             }
           });
 
-          // Create form and submit
           const form = document.createElement('form');
           form.method = 'POST';
           form.style.display = 'none';
 
-          // Add selected customer IDs
           selectedCheckboxes.forEach(cb => {
             const input = document.createElement('input');
             input.type = 'hidden';
@@ -2118,7 +1953,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
             form.appendChild(input);
           });
 
-          // Add bulk reset flag
           const bulkInput = document.createElement('input');
           bulkInput.type = 'hidden';
           bulkInput.name = 'bulk_password_reset';
@@ -2131,7 +1965,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
       });
     }
 
-    // Product delete confirmation
     document.querySelectorAll('.btn-delete').forEach(function (button) {
       button.addEventListener('click', function (e) {
         e.preventDefault();
@@ -2162,7 +1995,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
           buttonsStyling: false
         }).then((result) => {
           if (result.isConfirmed) {
-            // Show loading
             Swal.fire({
               title: 'Deleting product...',
               html: '<div class="text-center"><i class="fas fa-spinner fa-spin fa-2x text-danger mb-3"></i><br>Please wait...</div>',
@@ -2176,7 +2008,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
       });
     });
 
-    // Add custom CSS for consistent styling
     const customStyle = document.createElement('style');
     customStyle.textContent = `
       .swal-loading .swal2-html-container {

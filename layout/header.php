@@ -36,20 +36,17 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
 	<link rel="stylesheet" href="css/style.css?v=1.0">
 
 	<style>
-		/* Hide cart and profile on mobile when menu is collapsed */
 		@media (max-width: 991.98px) {
 			.mobile-user-actions {
 				display: none !important;
 			}
 			
-			/* Show cart and profile only when menu is expanded on mobile */
 			.navbar-collapse.show ~ .mobile-user-actions,
 			.navbar-collapse.collapsing ~ .mobile-user-actions {
 				display: none !important;
 			}
 		}
 		
-		/* Ensure proper spacing on desktop */
 		@media (min-width: 992px) {
 			.mobile-user-actions {
 				display: flex !important;
@@ -119,7 +116,6 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
 							<a href="contact.php" class="nav-link">Contact</a>
 						</li>
 						
-						<!-- Mobile-only cart and profile links in collapsed menu -->
 						<li class="nav-item d-lg-none">
 							<?php if ($is_logged_in): ?>
 								<a href="account.php" class="nav-link">
@@ -146,12 +142,9 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
 					</ul>
 				</div>
 				
-				<!-- Desktop-only cart and profile dropdowns -->
 				<div class="order-lg-last d-flex align-items-center mobile-user-actions">
-					<!-- Profile Dropdown Section -->
 					<div class="btn-group mr-3">
 						<?php if ($is_logged_in): ?>
-							<!-- Profile Dropdown for Logged In Users -->
 							<a href="#" class="btn-user dropdown-toggle d-flex align-items-center justify-content-center" 
 							   data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
 								<span class="fa fa-user profile-icon"></span>
@@ -166,14 +159,12 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
 								</a>
 							</div>
 						<?php else: ?>
-							<!-- Sign Up/Login for Guest Users -->
 							<a href="sign-up.php" class="btn-user d-flex align-items-center justify-content-center">
 								<span class="fa fa-user profile-icon"></span>
 							</a>
 						<?php endif; ?>
 					</div>
 					
-					<!-- Cart Dropdown Section -->
 					<div class="btn-group">
 						<a href="#" class="btn-cart dropdown-toggle dropdown-toggle-split" data-toggle="dropdown"
 							aria-haspopup="true" aria-expanded="false">
@@ -189,7 +180,6 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
 	</nav>
 
 	<script>
-		// Optional: Auto-close mobile menu when clicking on menu items
 		document.addEventListener('DOMContentLoaded', function() {
 			const navLinks = document.querySelectorAll('.navbar-nav .nav-link');
 			const navbarCollapse = document.querySelector('.navbar-collapse');
@@ -197,7 +187,6 @@ $current_page = basename($_SERVER['PHP_SELF'], '.php');
 			navLinks.forEach(link => {
 				link.addEventListener('click', function() {
 					if (window.innerWidth < 992) {
-						// Close the mobile menu
 						if (navbarCollapse.classList.contains('show')) {
 							const toggleButton = document.querySelector('.navbar-toggler');
 							toggleButton.click();

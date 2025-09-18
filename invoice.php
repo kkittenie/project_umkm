@@ -2,7 +2,6 @@
 session_start();
 include 'config.php';
 
-// Get order ID from URL
 $transaction_id = isset($_GET['order_id']) ? intval($_GET['order_id']) : 0;
 
 if ($transaction_id <= 0) {
@@ -10,7 +9,6 @@ if ($transaction_id <= 0) {
     exit();
 }
 
-// Fetch transaction details
 $sql_transaction = "SELECT t.*, u.fullname, u.email, u.phone, u.address 
                    FROM transaction t 
                    JOIN users u ON t.id_user = u.id 
@@ -24,7 +22,6 @@ if (mysqli_num_rows($result) == 0) {
 
 $transaction = mysqli_fetch_assoc($result);
 
-// Fetch order items
 $sql_details = "SELECT d.*, p.name, p.price, p.photo 
                FROM detail d 
                JOIN product p ON d.id_product = p.id 
@@ -81,7 +78,6 @@ while ($row = mysqli_fetch_assoc($details_result)) {
         <div class="container">
             <div class="row justify-content-center">
                 <div class="col-lg-10 ftco-animate">
-                    <!-- Invoice Header -->
                     <div class="invoice-header d-flex justify-content-between align-items-start mb-4">
                         <div>
                             <h1 class="h2 mb-0">INVOICE</h1>
@@ -97,7 +93,6 @@ while ($row = mysqli_fetch_assoc($details_result)) {
 
                     <div class="row">
                         <div class="col-md-6">
-                            <!-- Billing Information -->
                             <div class="invoice-details mb-4">
                                 <h5 class="mb-3">Bill To:</h5>
                                 <p class="mb-1"><strong><?= htmlspecialchars($transaction['fullname']) ?></strong></p>
@@ -108,7 +103,6 @@ while ($row = mysqli_fetch_assoc($details_result)) {
                         </div>
 
                         <div class="col-md-6">
-                            <!-- Order Information -->
                             <div class="invoice-details mb-4">
                                 <h5 class="mb-3">Order Information:</h5>
                                 <p class="mb-1"><strong>Order Date:</strong>
@@ -120,7 +114,6 @@ while ($row = mysqli_fetch_assoc($details_result)) {
                         </div>
                     </div>
 
-                    <!-- Order Items -->
                     <?php if (!empty($order_items) && is_array($order_items)): ?>
                         <div class="invoice-details mb-4">
                             <h5 class="mb-4">Order Items:</h5>
@@ -150,7 +143,6 @@ while ($row = mysqli_fetch_assoc($details_result)) {
                             <?php endforeach; ?>
                         </div>
 
-                        <!-- Order Total -->
                         <div class="invoice-total">
                             <div class="row">
                                 <div class="col-md-8">
@@ -181,7 +173,6 @@ while ($row = mysqli_fetch_assoc($details_result)) {
                             </div>
                         </div>
                     <?php else: ?>
-                        <!-- Fallback when order items parsing fails -->
                         <div class="invoice-details mb-4">
                             <h5 class="mb-4">Order Summary:</h5>
                             <div class="invoice-item p-3" style="border: 1px solid #dee2e6; border-radius: 5px;">
@@ -206,7 +197,6 @@ while ($row = mysqli_fetch_assoc($details_result)) {
                         </div>
                     <?php endif; ?>
 
-                    <!-- Thank You Message -->
                     <div class="no-print text-center mt-5 pt-4">
                         <h4 class="text-primary">Thank you for your order!</h4>
                         <p class="text-muted">We appreciate your business and hope you enjoy your meal.</p>
@@ -252,15 +242,12 @@ while ($row = mysqli_fetch_assoc($details_result)) {
     <script src="js/google-map.js"></script>
     <script src="js/main.js"></script>
 
-    	<!-- js sweet alert -->
 	<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 	<script>
 		$(document).ready(function () {
-			// Load cart dropdown on page load
 			loadCartDropdown();
 
-			// Add to cart functionality
 			$('.add-to-cart-btn').click(function (e) {
 				e.preventDefault();
 				var productId = $(this).data('product-id');
@@ -274,7 +261,6 @@ while ($row = mysqli_fetch_assoc($details_result)) {
 					if (data.success) {
 						$('#cart-count').text(data.cart_count);
 						loadCartDropdown();
-						// Sweet success alert for cart
 						Swal.fire({
 							icon: 'success',
 							title: 'Added to Cart!',
@@ -286,7 +272,6 @@ while ($row = mysqli_fetch_assoc($details_result)) {
 							position: 'top-end'
 						});
 					} else {
-						// Sweet error alert for cart
 						Swal.fire({
 							icon: 'error',
 							title: 'Oops...',

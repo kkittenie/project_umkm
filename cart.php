@@ -9,7 +9,6 @@ if (!isset($_SESSION['cart'])) {
 $cart_items = $_SESSION['cart'];
 $cart_count = count($cart_items);
 
-// Calculate totals
 $subtotal = 0;
 foreach ($cart_items as $item) {
 	$subtotal += $item['price'] * $item['quantity'];
@@ -41,7 +40,6 @@ $total = $subtotal - $discount;
 	<link rel="stylesheet" href="css/flaticon.css">
 	<link rel="stylesheet" href="css/style.css?v=1.0">
 
-	<!-- SweetAlert2 CSS -->
 	<link rel="stylesheet"
 		href="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/11.7.32/sweetalert2.min.css">
 
@@ -182,15 +180,12 @@ $total = $subtotal - $discount;
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.13.1/js/bootstrap-select.min.js"></script>
 	<script src="js/main.js"></script>
 
-	<!-- SweetAlert2 JS -->
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/11.7.32/sweetalert2.all.min.js"></script>
 
 	<script>
 		$(document).ready(function () {
-			// Load cart dropdown on page load
 			loadCartDropdown();
 
-			// Remove item from cart with SweetAlert confirmation
 			$('.remove-item').click(function () {
 				var productId = $(this).data('product-id');
 				var $row = $(this).closest('tr');
@@ -207,7 +202,6 @@ $total = $subtotal - $discount;
 					cancelButtonText: 'Cancel'
 				}).then((result) => {
 					if (result.isConfirmed) {
-						// Show loading
 						Swal.fire({
 							title: 'Removing...',
 							text: 'Please wait while we remove the item from your cart.',
@@ -230,13 +224,11 @@ $total = $subtotal - $discount;
 									$('#cart-count').text(data.cart_count);
 									loadCartDropdown();
 
-									// Show empty cart message if no items left
 									if ($('#cart-table-body tr:visible').length === 0) {
 										$('#cart-table-body').html('<tr><td colspan="7" class="text-center">Your cart is empty</td></tr>');
 										$('#checkout-btn').hide();
 									}
 
-									// Show success message
 									Swal.fire({
 										icon: 'success',
 										title: 'Item Removed!',
@@ -268,7 +260,6 @@ $total = $subtotal - $discount;
 				});
 			});
 
-			// Update quantity with validation
 			$('.quantity-input').change(function () {
 				var productId = $(this).data('product-id');
 				var quantity = parseInt($(this).val());
@@ -313,7 +304,6 @@ $total = $subtotal - $discount;
 				}, function (response) {
 					var data = JSON.parse(response);
 					if (data.success) {
-						// Update item total
 						var price = parseInt($row.find('.item-price').text().replace(/[^\d]/g, ''));
 						var itemTotal = price * quantity;
 						$row.find('.item-total').text('IDR ' + itemTotal.toLocaleString('id-ID'));
@@ -322,7 +312,6 @@ $total = $subtotal - $discount;
 						$('#cart-count').text(data.cart_count);
 						loadCartDropdown();
 
-						// Show success toast
 						Swal.fire({
 							icon: 'success',
 							title: 'Quantity Updated!',
@@ -340,7 +329,6 @@ $total = $subtotal - $discount;
 							text: data.message || 'Failed to update quantity. Please try again.',
 							confirmButtonColor: '#F96D00'
 						});
-						// Reset to previous value
 						$(this).val($(this).data('prev-value') || 1);
 					}
 				}).fail(function() {
@@ -350,12 +338,10 @@ $total = $subtotal - $discount;
 						text: 'Unable to connect to server. Please check your connection and try again.',
 						confirmButtonColor: '#F96D00'
 					});
-					// Reset to previous value
 					$(this).val($(this).data('prev-value') || 1);
 				});
 			});
 
-			// Store previous value before change
 			$('.quantity-input').focus(function() {
 				$(this).data('prev-value', $(this).val());
 			});
@@ -415,7 +401,6 @@ $total = $subtotal - $discount;
 	</script>
 
 	<style>
-		/* Custom SweetAlert2 styling to match your theme */
 		.swal2-popup {
 			font-family: 'Spectral', serif;
 		}

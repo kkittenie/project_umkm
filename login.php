@@ -12,7 +12,6 @@ if (isset($_POST['login'])) {
   $email = $_POST['email'];
   $password = $_POST['password'];
   
-  // Validasi input kosong
   if (empty($username) || empty($password)) {
     echo "<script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -100,12 +99,8 @@ if (isset($_POST['login'])) {
   $db->close();
 }
 
-// Initialize cart and wishlist if they don't exist
 if (!isset($_SESSION['cart'])) {
   $_SESSION['cart'] = array();
-}
-if (!isset($_SESSION['wishlist'])) {
-  $_SESSION['wishlist'] = array();
 }
 
 $cart_count = count($_SESSION['cart']);
@@ -136,7 +131,6 @@ $cart_count = count($_SESSION['cart']);
     <link rel="stylesheet" href="css/flaticon.css">
     <link rel="stylesheet" href="css/style.css?v=1.0">
 
-    <!-- SweetAlert2 CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 
   </head>
@@ -165,9 +159,6 @@ $cart_count = count($_SESSION['cart']);
     <div class="container">
       <div class="row justify-content-center">
         <div class="col-xl-10 ftco-animate">
-
-          <!-- message removed - using SweetAlert instead -->
-
           <form method="POST" action="">
             <div class="row align-items-end">
               <div class="col-md-6">
@@ -232,16 +223,13 @@ $cart_count = count($_SESSION['cart']);
     src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBVWaKrjvy3MaE7SQ74_uJiULgl1JY0H2s&sensor=false"></script>
   <script src="js/google-map.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.13.1/js/bootstrap-select.min.js"></script>
-  <!-- SweetAlert2 JS -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src="js/main.js"></script>
 
   <script>
     $(document).ready(function () {
-      // Load cart dropdown on page load
       loadCartDropdown();
 
-      // Add to cart functionality
       $('.add-to-cart-btn').click(function (e) {
         e.preventDefault();
         var productId = $(this).data('product-id');
@@ -255,7 +243,6 @@ $cart_count = count($_SESSION['cart']);
           if (data.success) {
             $('#cart-count').text(data.cart_count);
             loadCartDropdown();
-          // Replace alert with SweetAlert2
           Swal.fire({
             icon: 'success',
             title: 'Added to Cart!',
@@ -270,7 +257,6 @@ $cart_count = count($_SESSION['cart']);
             }
           });
           } else {
-            // Replace alert with SweetAlert2
             Swal.fire({
               icon: 'error',
               title: 'Oops...',
@@ -323,7 +309,6 @@ $cart_count = count($_SESSION['cart']);
       color: red;
     }
     
-    /* SweetAlert2 Custom Styling */
     .swal-font-spectral {
       font-family: 'Spectral', serif !important;
     }

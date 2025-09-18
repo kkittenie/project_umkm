@@ -2,14 +2,12 @@
 session_start();
 include 'config.php';
 
-// Initialize cart and wishlist if they don't exist
 if (!isset($_SESSION['cart'])) {
 	$_SESSION['cart'] = array();
 }
 
 $cart_count = count($_SESSION['cart']);
 
-// Check if user is logged in
 $is_logged_in = isset($_SESSION['user_id']) || isset($_SESSION['username']);
 
 
@@ -38,7 +36,6 @@ $is_logged_in = isset($_SESSION['user_id']) || isset($_SESSION['username']);
 	<link rel="stylesheet" href="css/flaticon.css">
 	<link rel="stylesheet" href="css/style.css">
 
-	<!-- SweetAlert2 CSS -->
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 </head>
 
@@ -315,15 +312,12 @@ $is_logged_in = isset($_SESSION['user_id']) || isset($_SESSION['username']);
 	<script src="js/google-map.js"></script>
 	<script src="js/main.js"></script>
 
-	<!-- js sweet alert -->
 	<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 	<script>
 		$(document).ready(function () {
-			// Load cart dropdown on page load
 			loadCartDropdown();
 
-			// Add to cart functionality
 			$('.add-to-cart-btn').click(function (e) {
 				e.preventDefault();
 				var productId = $(this).data('product-id');
@@ -337,7 +331,6 @@ $is_logged_in = isset($_SESSION['user_id']) || isset($_SESSION['username']);
 					if (data.success) {
 						$('#cart-count').text(data.cart_count);
 						loadCartDropdown();
-						// Sweet success alert for cart
 						Swal.fire({
 							icon: 'success',
 							title: 'Added to Cart!',
@@ -349,7 +342,6 @@ $is_logged_in = isset($_SESSION['user_id']) || isset($_SESSION['username']);
 							position: 'top-end'
 						});
 					} else {
-						// Sweet error alert for cart
 						Swal.fire({
 							icon: 'error',
 							title: 'Oops...',

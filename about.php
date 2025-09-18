@@ -2,7 +2,6 @@
 session_start();
 include 'config.php';
 
-// Initialize cart and wishlist if they don't exist
 if (!isset($_SESSION['cart'])) {
 	$_SESSION['cart'] = array();
 }
@@ -375,10 +374,8 @@ $cart_count = count($_SESSION['cart']);
 
 		<script>
 			$(document).ready(function () {
-				// Load cart dropdown on page load
 				loadCartDropdown();
 
-				// Add to cart functionality
 				$('.add-to-cart-btn').click(function (e) {
 					e.preventDefault();
 					var productId = $(this).data('product-id');
@@ -435,12 +432,6 @@ $cart_count = count($_SESSION['cart']);
 				}
 			});
 		</script>
-
-		<style>
-			.wishlist-btn.in-wishlist .flaticon-heart {
-				color: red;
-			}
-		</style>
 
 	</body>
 

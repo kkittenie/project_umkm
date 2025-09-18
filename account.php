@@ -3,138 +3,126 @@ include "config.php";
 session_start();
 
 $update_message = "";
-$update_type = ""; // Added to track message type for SweetAlert
+$update_type = "";
 $user_data = null;
 
-// Redirect jika belum login
 if (!isset($_SESSION["is_login"])) {
-	header("Location: login.php");
-	exit();
+    header("Location: login.php");
+    exit();
 }
 
-// Initialize cart if they don't exist
 if (!isset($_SESSION['cart'])) {
-	$_SESSION['cart'] = array();
+    $_SESSION['cart'] = array();
 }
 $cart_count = count($_SESSION['cart']);
 
-// Ambil data user dari database
 $user_id = $_SESSION["user_id"];
-$sql = "SELECT fullname, username, phone, address, profile_picture FROM users WHERE id = '$user_id'";
-$result = mysqli_query($db, $sql);
+$result = mysqli_query($db, "SELECT fullname, username, phone, address, profile_picture FROM users WHERE id = '$user_id'");
 if ($result) {
-	$user_data = mysqli_fetch_assoc($result);
+    $user_data = mysqli_fetch_assoc($result);
 }
 
-// Fetch user orders (updated to use transaction table to match with invoice)
-$orders_sql = "SELECT id_transaction as id, date as order_date, total_price, 
-               status as order_status, payment_method 
-               FROM transaction 
-               WHERE id_user = '$user_id' 
-               ORDER BY date DESC 
-               LIMIT 3";
-$orders_result = mysqli_query($db, $orders_sql);
+$orders_result = mysqli_query($db, "SELECT id_transaction as id, date as order_date, total_price, 
+                                           status as order_status, payment_method 
+                                    FROM transaction 
+                                    WHERE id_user = '$user_id' 
+                                    ORDER BY date DESC 
+                                    LIMIT 3");
 $user_orders = [];
 if ($orders_result) {
-	while ($row = mysqli_fetch_assoc($orders_result)) {
-		// Get total items from detail table
-		$order_id = $row['id'];
-		$detail_sql = "SELECT SUM(amount) AS total_items 
-		               FROM detail 
-		               WHERE id_transaction = '$order_id'";
-		$detail_result = mysqli_query($db, $detail_sql);
-		$detail_row = mysqli_fetch_assoc($detail_result);
-		$row['total_items'] = $detail_row['total_items'] ?? 0;
-
-		$user_orders[] = $row;
-	}
+    while ($row = mysqli_fetch_assoc($orders_result)) {
+        $order_id = $row['id'];
+        $detail_result = mysqli_query($db, "SELECT SUM(amount) AS total_items FROM detail WHERE id_transaction = '$order_id'");
+        $detail_row = mysqli_fetch_assoc($detail_result);
+        $row['total_items'] = $detail_row['total_items'] ?? 0;
+        $user_orders[] = $row;
+    }
 }
 
-// Upload profile picture
 if (isset($_POST["update-picture"])) {
-	if (isset($_FILES['profile_picture']) && $_FILES['profile_picture']['error'] == 0) {
-		$allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
-		$max_size = 5 * 1024 * 1024; // 5MB
+    if (isset($_FILES['profile_picture']) && $_FILES['profile_picture']['error'] == 0) {
+        $allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+        $max_size = 5 * 1024 * 1024;
 
-		$file_type = $_FILES['profile_picture']['type'];
-		$file_size = $_FILES['profile_picture']['size'];
+        $file_type = $_FILES['profile_picture']['type'];
+        $file_size = $_FILES['profile_picture']['size'];
 
-		if (in_array($file_type, $allowed_types) && $file_size <= $max_size) {
-			$upload_dir = 'uploads/profile_pictures/';
-			if (!file_exists($upload_dir)) {
-				mkdir($upload_dir, 0777, true);
-			}
+        if (in_array($file_type, $allowed_types) && $file_size <= $max_size) {
+            $upload_dir = 'uploads/profile_pictures/';
+            
+            if (!file_exists($upload_dir)) {
+                mkdir($upload_dir, 0755, true);
+            }
 
-			$file_extension = pathinfo($_FILES['profile_picture']['name'], PATHINFO_EXTENSION);
-			$new_filename = 'profile_' . $user_id . '_' . time() . '.' . $file_extension;
-			$upload_path = $upload_dir . $new_filename;
+            $file_extension = pathinfo($_FILES['profile_picture']['name'], PATHINFO_EXTENSION);
+            $new_filename = 'profile_' . $user_id . '_' . time() . '.' . $file_extension;
+            $upload_path = $upload_dir . $new_filename;
 
-			if (move_uploaded_file($_FILES['profile_picture']['tmp_name'], $upload_path)) {
-				// Hapus foto lama kalau ada
-				if (!empty($user_data['profile_picture']) && file_exists($user_data['profile_picture'])) {
-					unlink($user_data['profile_picture']);
-				}
+            if (move_uploaded_file($_FILES['profile_picture']['tmp_name'], $upload_path)) {
+                if (!empty($user_data['profile_picture']) && file_exists($user_data['profile_picture'])) {
+                    unlink($user_data['profile_picture']);
+                }
 
-				// Update database
-				$sql = "UPDATE users SET profile_picture = '$upload_path' WHERE id = '$user_id'";
-				if (mysqli_query($db, $sql)) {
-					$update_message = "Profile picture updated successfully!";
-					$update_type = "success";
-					$user_data['profile_picture'] = $upload_path;
-				} else {
-					$update_message = "Failed to save profile picture";
-					$update_type = "error";
-				}
-			} else {
-				$update_message = "Failed to upload file";
-				$update_type = "error";
-			}
-		} else {
-			$update_message = "Invalid file type or size too large (max 5MB)";
-			$update_type = "error";
-		}
-	} else {
-		$update_message = "Please select a file to upload";
-		$update_type = "error";
-	}
+                $result = mysqli_query($db, "UPDATE users SET profile_picture = '$upload_path' WHERE id = '$user_id'");
+                if ($result) {
+                    $update_message = "Profile picture updated successfully!";
+                    $update_type = "success";
+                    $user_data['profile_picture'] = $upload_path;
+                } else {
+                    $update_message = "Failed to save profile picture: " . mysqli_error($db);
+                    $update_type = "error";
+                }
+            } else {
+                $update_message = "Failed to upload file. Check folder permissions.";
+                $update_type = "error";
+            }
+        } else {
+            $update_message = "Invalid file type or size too large (max 5MB). Only JPG, PNG, GIF allowed.";
+            $update_type = "error";
+        }
+    } else {
+        $update_message = "Please select a valid file to upload.";
+        $update_type = "error";
+    }
 }
 
-// Update profil (fullname, username, phone, address)
 if (isset($_POST["update-profile"])) {
-	$fullname = $_POST["fullname"];
-	$username = $_POST["username"];
-	$phone = $_POST["phone"];
-	$address = $_POST["address"];
+    $fullname = mysqli_real_escape_string($db, trim($_POST["fullname"]));
+    $username = mysqli_real_escape_string($db, trim($_POST["username"]));
+    $phone = mysqli_real_escape_string($db, trim($_POST["phone"]));
+    $address = mysqli_real_escape_string($db, trim($_POST["address"]));
 
-	if (empty($fullname) || empty($username) || empty($phone) || empty($address)) {
-		$update_message = "All fields must be filled!";
-		$update_type = "error";
-	} else {
-		$sql = "UPDATE users SET fullname = '$fullname', username = '$username', phone = '$phone', address = '$address' WHERE id = '$user_id'";
-		if (mysqli_query($db, $sql)) {
-			$update_message = "Profile updated successfully!";
-			$update_type = "success";
-			$user_data['fullname'] = $fullname;
-			$user_data['username'] = $username;
-			$user_data['phone'] = $phone;
-			$user_data['address'] = $address;
-		} else {
-			if (mysqli_errno($db) == 1062) {
-				$update_message = "Username or email already used by another account.";
-				$update_type = "error";
-			} else {
-				$update_message = "Update failed";
-				$update_type = "error";
-			}
-		}
-	}
+    if (empty($fullname) || empty($username) || empty($phone) || empty($address)) {
+        $update_message = "All fields must be filled!";
+        $update_type = "error";
+    } else {
+        $check_username = mysqli_query($db, "SELECT id FROM users WHERE username = '$username' AND id != '$user_id'");
+        
+        if (mysqli_num_rows($check_username) > 0) {
+            $update_message = "Username already used by another account.";
+            $update_type = "error";
+        } else {
+            $result = mysqli_query($db, "UPDATE users SET fullname = '$fullname', username = '$username', phone = '$phone', address = '$address' WHERE id = '$user_id'");
+            
+            if ($result) {
+                $update_message = "Profile updated successfully!";
+                $update_type = "success";
+                $user_data['fullname'] = $fullname;
+                $user_data['username'] = $username;
+                $user_data['phone'] = $phone;
+                $user_data['address'] = $address;
+            } else {
+                $update_message = "Update failed: " . mysqli_error($db);
+                $update_type = "error";
+            }
+        }
+    }
 }
 
-// Ganti password
 if (isset($_POST["change-password"])) {
-    $current_password = $_POST["current_password"];
-    $new_password = $_POST["new_password"];
-    $confirm_password = $_POST["confirm_password"];
+    $current_password = trim($_POST["current_password"]);
+    $new_password = trim($_POST["new_password"]);
+    $confirm_password = trim($_POST["confirm_password"]);
 
     if (empty($current_password) || empty($new_password) || empty($confirm_password)) {
         $update_message = "All password fields must be filled!";
@@ -146,19 +134,17 @@ if (isset($_POST["change-password"])) {
         $update_message = "New password must be at least 6 characters!";
         $update_type = "error";
     } else {
-        // Ambil password lama dari database
-        $sql = "SELECT password FROM users WHERE id = '$user_id'";
-        $result = mysqli_query($db, $sql);
+        $result = mysqli_query($db, "SELECT password FROM users WHERE id = '$user_id'");
         $stored_password = mysqli_fetch_assoc($result)['password'];
 
-        // Cek password lama
         if ($current_password === $stored_password) {
-            $sql = "UPDATE users SET password = '$new_password' WHERE id = '$user_id'";
-            if (mysqli_query($db, $sql)) {
+            $update_result = mysqli_query($db, "UPDATE users SET password = '$new_password' WHERE id = '$user_id'");
+            
+            if ($update_result) {
                 $update_message = "Password changed successfully!";
                 $update_type = "success";
             } else {
-                $update_message = "Password change failed";
+                $update_message = "Password change failed: " . mysqli_error($db);
                 $update_type = "error";
             }
         } else {
@@ -168,22 +154,31 @@ if (isset($_POST["change-password"])) {
     }
 }
 
-// Helper function to get status badge class
-function getStatusBadgeClass($status)
-{
-	switch (strtolower($status)) {
-		case 'pending':
-			return 'badge-warning';
-		case 'processing':
-			return 'badge-info';
-		case 'delivered':
-		case 'completed':
-			return 'badge-success';
-		case 'cancelled':
-			return 'badge-danger';
-		default:
-			return 'badge-secondary';
-	}
+function getStatusBadgeClass($status) {
+    switch (strtolower($status)) {
+        case 'pending':
+            return 'badge-warning';
+        case 'processing':
+        case 'confirmed':
+            return 'badge-info';
+        case 'shipped':
+            return 'badge-primary';
+        case 'delivered':
+        case 'completed':
+            return 'badge-success';
+        case 'cancelled':
+            return 'badge-danger';
+        default:
+            return 'badge-secondary';
+    }
+}
+
+function formatCurrency($amount) {
+    return 'IDR ' . number_format($amount, 0, ',', '.');
+}
+
+function formatDate($date) {
+    return date('d M Y, H:i', strtotime($date));
 }
 
 mysqli_close($db);

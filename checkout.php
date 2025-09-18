@@ -2,7 +2,6 @@
 session_start();
 include 'config.php';
 
-// Initialize cart and wishlist if they don't exist
 if (!isset($_SESSION['cart'])) {
 	$_SESSION['cart'] = array();
 }
@@ -10,7 +9,6 @@ if (!isset($_SESSION['cart'])) {
 $cart_items = $_SESSION['cart'];
 $cart_count = count($cart_items);
 
-// Calculate totals (same logic as cart page)
 $subtotal = 0;
 foreach ($cart_items as $item) {
 	$subtotal += $item['price'] * $item['quantity'];
@@ -18,7 +16,6 @@ foreach ($cart_items as $item) {
 $discount = 0;
 $total = $subtotal - $discount;
 
-// Get user billing information if logged in
 $user_data = null;
 if (isset($_SESSION['user_id'])) {
 	$user_id = $_SESSION['user_id'];
@@ -30,7 +27,6 @@ if (isset($_SESSION['user_id'])) {
 	}
 }
 
-// Process checkout form submission
 $success_message = '';
 $error_message = '';
 
@@ -44,11 +40,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
     $payment_method = $_POST['payment_method'] ?? 'cod';
     $total_price = $total;
 
-    // Start database transaction for data consistency
     mysqli_autocommit($db, false);
     
     try {
-        // Insert into transaction table
         $sql_transaction = "INSERT INTO transaction (id_user, date, total_price, payment_method) 
                            VALUES ('$user_id', NOW(), '$total_price', '$payment_method')";
         
@@ -57,13 +51,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
         }
 
         $transaction_id = mysqli_insert_id($db);
-
-        // Insert each cart item into detail table and update stock
         foreach ($cart_items as $item) {
             $product_id = $item['id'];
             $quantity = $item['quantity'];
 
-            // Check current stock first
             $check_stock_sql = "SELECT stock FROM product WHERE id = '$product_id'";
             $stock_result = mysqli_query($db, $check_stock_sql);
             $product_data = mysqli_fetch_assoc($stock_result);
@@ -76,36 +67,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
                 throw new Exception("Insufficient stock for product ID: " . $product_id);
             }
 
-            // Insert into detail table
             $sql_detail = "INSERT INTO detail (id_transaction, id_product, amount) 
                           VALUES ('$transaction_id', '$product_id', '$quantity')";
             if (!mysqli_query($db, $sql_detail)) {
                 throw new Exception("Error inserting detail: " . mysqli_error($db));
             }
 
-            // Update product stock
             $sql_stock = "UPDATE product SET stock = stock - $quantity WHERE id = '$product_id'";
             if (!mysqli_query($db, $sql_stock)) {
                 throw new Exception("Error updating stock: " . mysqli_error($db));
             }
         }
 
-        // Commit transaction
         mysqli_commit($db);
         
-        // Clear cart
         $_SESSION['cart'] = [];
         
-        // Set success message for display
         $success_message = "Order placed successfully! Your transaction ID is #" . $transaction_id;
         
     } catch (Exception $e) {
-        // Rollback transaction on error
         mysqli_rollback($db);
         $error_message = $e->getMessage();
     }
     
-    // Turn autocommit back on
     mysqli_autocommit($db, true);
 }
 
@@ -134,7 +118,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 	<link rel="stylesheet" href="css/flaticon.css">
 	<link rel="stylesheet" href="css/style.css?v=1.0">
 
-	<!-- SweetAlert2 CSS -->
 	<link rel="stylesheet"
 		href="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/11.7.32/sweetalert2.min.css">
 
@@ -238,7 +221,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 									</div>
 								</div>
 							</div>
-						</form><!-- END -->
+						</form>
 
 						<div class="row mt-5 pt-3 d-flex">
 							<div class="col-md-6 d-flex">
@@ -309,7 +292,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 								</div>
 							</div>
 						</div>
-					</div> <!-- .col-md-8 -->
+					</div>
 				</div>
 			<?php endif; ?>
 		</div>
@@ -341,12 +324,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-select/1.13.1/js/bootstrap-select.min.js"></script>
 	<script src="js/main.js"></script>
 
-	<!-- SweetAlert2 JS -->
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/11.7.32/sweetalert2.all.min.js"></script>
 
 	<script>
 		$(document).ready(function () {
-			// Show error message if exists
 			<?php if (!empty($error_message)): ?>
 				Swal.fire({
 					icon: 'error',
@@ -356,7 +337,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 				});
 			<?php endif; ?>
 
-			// Show success message if exists
 			<?php if (!empty($success_message)): ?>
 				Swal.fire({
 					icon: 'success',
@@ -373,7 +353,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 						popup: 'animate__animated animate__fadeOutUp'
 					}
 				}).then((result) => {
-					// Redirect to invoice page when user clicks "View Invoice" or alert auto-closes
 					<?php if (isset($transaction_id)): ?>
 						window.location.href = 'invoice.php?order_id=<?= $transaction_id ?>';
 					<?php else: ?>
@@ -382,10 +361,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 				});
 			<?php endif; ?>
 
-			// Load cart dropdown on page load
 			loadCartDropdown();
 
-			// Add to cart functionality
 			$('.add-to-cart-btn').click(function (e) {
 				e.preventDefault();
 				var productId = $(this).data('product-id');
@@ -399,7 +376,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 					if (data.success) {
 						$('#cart-count').text(data.cart_count);
 						loadCartDropdown();
-						// Show success message
 						Swal.fire({
 							icon: 'success',
 							title: 'Added to Cart!',
@@ -411,7 +387,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 							position: 'top-end',
 							confirmButtonColor: '#F96D00'
 						});
-						// Refresh page to update totals
 						setTimeout(() => {
 							location.reload();
 						}, 2000);
@@ -478,7 +453,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
 			border-radius: 4px;
 		}
 
-		/* Custom SweetAlert2 styling to match your theme */
 		.swal2-popup {
 			font-family: 'Spectral', serif;
 		}
