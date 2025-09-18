@@ -1,9 +1,10 @@
 <?php
 include '../config.php';
 session_start();
-// if (!isset($_SESSION['admin'])) {
-//   header('Location: login.php');
-// }
+
+if (!isset($_SESSION['admin'])) {
+  header('Location: login.php');
+}
 
 $current_page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
 
