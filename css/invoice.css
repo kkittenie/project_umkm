@@ -1,0 +1,42 @@
+.invoice-header {
+  border-bottom: 2px solid #f8f9fa;
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+}
+
+.invoice-details {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 30px;
+}
+
+.invoice-item {
+  border-bottom: 1px solid #e9ecef;
+  padding: 15px 0;
+}
+
+.invoice-item:last-child {
+  border-bottom: none;
+}
+
+.invoice-total {
+  background: #fff;
+  border: 2px solid #f96d00;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  .hero-wrap {
+    display: none !important;
+  }
+}

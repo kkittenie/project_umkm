@@ -1,0 +1,176 @@
+/* Responsive styles for cart and profile dropdowns */
+/* Add these styles to your existing style.css file */
+
+/* Mobile-first approach for dropdowns */
+@media (max-width: 991.98px) {
+    /* Profile and Cart container adjustments */
+    .order-lg-last {
+        margin-top: 10px;
+        margin-bottom: 10px;
+    }
+    
+    /* Profile dropdown adjustments */
+    .btn-group .btn-user {
+        padding: 8px 12px;
+        font-size: 14px;
+    }
+    
+    .btn-group .dropdown-menu {
+        min-width: 180px;
+        right: 0 !important;
+        left: auto !important;
+        transform: translateX(0);
+    }
+    
+    /* Ensure dropdown items are properly sized */
+    .dropdown-menu .dropdown-item {
+        padding: 8px 16px;
+        font-size: 14px;
+        white-space: nowrap;
+    }
+    
+    /* Cart dropdown adjustments */
+    .btn-cart {
+        padding: 8px 12px;
+        font-size: 14px;
+    }
+    
+    /* Cart dropdown specific positioning */
+    #cart-dropdown {
+        min-width: 250px;
+        max-width: 300px;
+        right: 0 !important;
+        left: auto !important;
+    }
+    
+    /* Cart count badge adjustments */
+    #cart-count {
+        font-size: 11px;
+        min-width: 18px;
+        height: 18px;
+        line-height: 18px;
+    }
+}
+
+@media (max-width: 767.98px) {
+    /* Smaller screens - more compact */
+    .order-lg-last {
+        justify-content: center;
+        margin-top: 15px;
+    }
+    
+    .btn-group {
+        margin: 0 5px;
+    }
+    
+    /* Profile dropdown */
+    .btn-user {
+        padding: 6px 10px;
+        font-size: 13px;
+    }
+    
+    .profile-icon {
+        font-size: 16px;
+    }
+    
+    /* Cart dropdown */
+    .btn-cart {
+        padding: 6px 10px;
+    }
+    
+    .flaticon-shopping-bag {
+        font-size: 16px;
+    }
+    
+    /* Dropdown menus full width on very small screens */
+    .dropdown-menu {
+        min-width: 200px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    
+    #cart-dropdown {
+        min-width: 280px;
+        max-width: calc(100vw - 40px);
+    }
+}
+
+@media (max-width: 575.98px) {
+    /* Extra small screens */
+    .order-lg-last {
+        width: 100%;
+        justify-content: space-around;
+        padding: 10px 0;
+        border-top: 1px solid rgba(255,255,255,0.1);
+        margin-top: 10px;
+    }
+    
+    .btn-group {
+        flex: 0 0 auto;
+    }
+    
+    /* Make dropdowns stack better */
+    .dropdown-menu {
+        font-size: 13px;
+        border-radius: 6px;
+    }
+    
+    .dropdown-item {
+        padding: 10px 15px;
+    }
+    
+    /* Cart dropdown takes more space on mobile */
+    #cart-dropdown {
+        right: 0 !important;
+        left: auto !important;
+        min-width: 260px;
+        max-width: calc(100vw - 20px);
+        margin-right: 10px;
+    }
+    
+    /* Profile dropdown positioning */
+    .btn-group:first-child .dropdown-menu {
+        right: auto !important;
+        left: 0 !important;
+    }
+}
+
+/* Ensure dropdowns don't overflow viewport */
+@media (max-width: 480px) {
+    .dropdown-menu {
+        position: absolute !important;
+        max-height: 60vh;
+        overflow-y: auto;
+    }
+    
+    #cart-dropdown {
+        max-width: calc(100vw - 10px);
+        margin-right: 5px;
+    }
+}
+
+/* Touch-friendly improvements */
+@media (hover: none) and (pointer: coarse) {
+    .dropdown-item {
+        padding: 12px 16px;
+        font-size: 16px;
+    }
+    
+    .btn-user, .btn-cart {
+        padding: 10px 14px;
+        min-height: 44px;
+        min-width: 44px;
+    }
+}
+
+/* Landscape orientation adjustments for mobile */
+@media (max-width: 767.98px) and (orientation: landscape) {
+    .order-lg-last {
+        margin-top: 5px;
+        margin-bottom: 5px;
+    }
+    
+    .dropdown-menu {
+        max-height: 50vh;
+        overflow-y: auto;
+    }
+}
