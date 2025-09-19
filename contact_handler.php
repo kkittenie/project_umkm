@@ -8,21 +8,18 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $subject = mysqli_real_escape_string($db, trim($_POST['subject']));
     $message = mysqli_real_escape_string($db, trim($_POST['message']));
     
-    // Validate required fields
     if (empty($name) || empty($email) || empty($subject) || empty($message)) {
         $_SESSION['error'] = 'All fields are required.';
         header('Location: contact.php');
         exit;
     }
     
-    // Validate email format
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $_SESSION['error'] = 'Please enter a valid email address.';
         header('Location: contact.php');
         exit;
     }
     
-    // Insert into database
     $sql = "INSERT INTO contact_messages (name, email, subject, message) VALUES ('$name', '$email', '$subject', '$message')";
     
     if (mysqli_query($db, $sql)) {
