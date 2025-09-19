@@ -69,7 +69,7 @@ function getStatusBadgeClass($status) {
     }
 }
 function formatCurrency($amount) {
-    return 'Rp ' . number_format($amount, 0, ',', '.');
+    return 'IDR ' . number_format($amount, 0, ',', '.');
 }
 function formatDate($date) {
     return date('d M Y, H:i', strtotime($date));
