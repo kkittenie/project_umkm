@@ -8,6 +8,51 @@ if (!isset($_SESSION['admin'])) {
 
 $current_page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
 
+// Contact messages handling
+if ($current_page === 'messages') {
+  $action = $_GET['action'] ?? '';
+  
+  if ($action === 'mark_read' && isset($_GET['id'])) {
+    $message_id = (int) $_GET['id'];
+    mysqli_query($db, "UPDATE contact_messages SET status = 'read' WHERE id = $message_id");
+    $_SESSION['alert'] = "Message marked as read!";
+    header("Location: dashboard.php?page=messages");
+    exit;
+  }
+  
+  if ($action === 'delete' && isset($_GET['id'])) {
+    $message_id = (int) $_GET['id'];
+    $result = mysqli_query($db, "DELETE FROM contact_messages WHERE id = $message_id");
+    if ($result) {
+      $_SESSION['alert'] = "Message deleted successfully!";
+    } else {
+      $_SESSION['error'] = "Error deleting message.";
+    }
+    header("Location: dashboard.php?page=messages");
+    exit;
+  }
+  
+  if (isset($_POST['bulk_mark_read'])) {
+    if (isset($_POST['message_ids']) && is_array($_POST['message_ids'])) {
+      $ids = implode(',', array_map('intval', $_POST['message_ids']));
+      mysqli_query($db, "UPDATE contact_messages SET status = 'read' WHERE id IN ($ids)");
+      $_SESSION['alert'] = "Selected messages marked as read!";
+    }
+    header("Location: dashboard.php?page=messages");
+    exit;
+  }
+  
+  if (isset($_POST['add_admin_note'])) {
+    $message_id = (int) $_POST['message_id'];
+    $admin_note = mysqli_real_escape_string($db, $_POST['admin_note']);
+    
+    mysqli_query($db, "UPDATE contact_messages SET admin_notes = '$admin_note', status = 'replied' WHERE id = $message_id");
+    $_SESSION['alert'] = "Admin note added successfully!";
+    header("Location: dashboard.php?page=messages");
+    exit;
+  }
+}
+
 if ($current_page === 'customers') {
   $action = $_GET['action'] ?? '';
 
@@ -114,6 +159,23 @@ if (isset($_POST['update_order_status'])) {
   }
 }
 
+// Get contact messages data
+$contact_messages = [];
+if ($current_page === 'messages') {
+  $status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
+  
+  if ($status_filter === 'all') {
+    $sql = "SELECT * FROM contact_messages ORDER BY date_submitted DESC";
+  } else {
+    $sql = "SELECT * FROM contact_messages WHERE status = '$status_filter' ORDER BY date_submitted DESC";
+  }
+  
+  $result = mysqli_query($db, $sql);
+  while ($row = mysqli_fetch_assoc($result)) {
+    $contact_messages[] = $row;
+  }
+}
+
 $customers = [];
 if ($current_page === 'customers') {
   $search = isset($_GET['search']) ? $_GET['search'] : '';
@@ -189,6 +251,15 @@ if ($current_page === 'dashboard') {
   $result = mysqli_query($db, "SELECT COUNT(*) as total_customers FROM users WHERE role = 'user'");
   $customer_row = mysqli_fetch_assoc($result);
   $stats['total_customers'] = $customer_row['total_customers'] ?? 0;
+  
+  // Add contact messages stats
+  $result = mysqli_query($db, "SELECT COUNT(*) as total_messages FROM contact_messages");
+  $messages_row = mysqli_fetch_assoc($result);
+  $stats['total_messages'] = $messages_row['total_messages'] ?? 0;
+  
+  $result = mysqli_query($db, "SELECT COUNT(*) as unread_messages FROM contact_messages WHERE status = 'unread'");
+  $unread_row = mysqli_fetch_assoc($result);
+  $stats['unread_messages'] = $unread_row['unread_messages'] ?? 0;
 }
 
 $action = $_GET['action'] ?? '';
@@ -490,13 +561,13 @@ if ($action == "toggle_status" && $current_page === 'products') {
       letter-spacing: 0.5px;
     }
 
-    .status-pending {
+    .status-pending, .status-unread {
       background: #fff3cd;
       color: #856404;
       border: 1px solid #ffeaa7;
     }
 
-    .status-confirmed {
+    .status-confirmed, .status-read {
       background: #d1edff;
       color: #0c5460;
       border: 1px solid #74b9ff;
@@ -514,7 +585,7 @@ if ($action == "toggle_status" && $current_page === 'products') {
       border: 1px solid #d63384;
     }
 
-    .status-delivered {
+    .status-delivered, .status-replied {
       background: #d4edda;
       color: #155724;
       border: 1px solid #00b894;
@@ -651,29 +722,23 @@ if ($action == "toggle_status" && $current_page === 'products') {
       color: #F96D00 !important;
     }
 
-    .customer-checkbox {
+    .customer-checkbox, .message-checkbox {
       width: 16px;
       height: 16px;
       flex-shrink: 0;
     }
 
-    .customer-avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background-color: #6c757d;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-      font-size: 16px;
-      text-transform: uppercase;
-      flex-shrink: 0;
+    .customer-card, .message-card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: var(--card-shadow);
+      margin-bottom: 15px;
+      border: none;
+      overflow: hidden;
+      transition: transform 0.2s ease;
     }
 
-
-    .customer-card:hover {
+    .customer-card:hover, .message-card:hover {
       transform: translateY(-2px);
     }
 
@@ -696,6 +761,24 @@ if ($action == "toggle_status" && $current_page === 'products') {
       border-radius: 12px;
       box-shadow: var(--card-shadow);
       margin-bottom: 20px;
+    }
+
+    .message-header {
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+      border-bottom: 1px solid #dee2e6;
+      padding: 20px;
+    }
+
+    .message-content {
+      padding: 20px;
+    }
+
+    .admin-note-section {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 15px;
+      border-left: 4px solid var(--primary-color);
     }
   </style>
 </head>
@@ -731,6 +814,17 @@ if ($action == "toggle_status" && $current_page === 'products') {
               </a>
             </li>
             <li class="nav-item">
+              <a class="nav-link <?= $current_page === 'messages' ? 'active' : '' ?>" href="dashboard.php?page=messages">
+                <i class="fas fa-envelope"></i>Messages
+                <?php
+                $unread_result = $db->query("SELECT COUNT(*) as count FROM contact_messages WHERE status = 'unread'");
+                $unread_count = $unread_result->fetch_assoc()['count'];
+                if ($unread_count > 0): ?>
+                  <span class="badge bg-danger rounded-pill ms-auto"><?= $unread_count ?></span>
+                <?php endif; ?>
+              </a>
+            </li>
+            <li class="nav-item">
               <a class="nav-link <?= $current_page === 'orders' ? 'active' : '' ?>" href="dashboard.php?page=orders">
                 <i class="fas fa-receipt"></i>Orders
                 <?php
@@ -751,9 +845,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
               <a class="nav-link <?= $current_page === 'customers' ? 'active' : '' ?>"
                 href="dashboard.php?page=customers">
                 <i class="fas fa-users"></i>Customers
-                <?php
-                $customer_result = $db->query("SELECT COUNT(*) as count FROM users WHERE role = 'user'");
-                ?>
               </a>
             </li>
           </ul>
@@ -788,10 +879,10 @@ if ($action == "toggle_status" && $current_page === 'products') {
               <div class="col-md-3 mb-3">
                 <div class="stat-card">
                   <div class="stat-icon" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-                    <i class="fas fa-clock"></i>
+                    <i class="fas fa-envelope"></i>
                   </div>
-                  <h6 class="text-muted">Pending Orders</h6>
-                  <h2 class="mb-0"><?= $stats['pending'] ?? 0 ?></h2>
+                  <h6 class="text-muted">Unread Messages</h6>
+                  <h2 class="mb-0"><?= $stats['unread_messages'] ?? 0 ?></h2>
                 </div>
               </div>
               <div class="col-md-3 mb-3">
@@ -819,6 +910,11 @@ if ($action == "toggle_status" && $current_page === 'products') {
                 <div class="stat-card">
                   <h5 class="mb-3">Quick Actions</h5>
                   <div class="d-flex flex-wrap gap-2">
+                    <?php if ($stats['unread_messages'] > 0): ?>
+                      <a href="dashboard.php?page=messages&status=unread" class="btn btn-danger">
+                        <i class="fas fa-envelope me-1"></i>Review Unread Messages (<?= $stats['unread_messages'] ?>)
+                      </a>
+                    <?php endif; ?>
                     <a href="dashboard.php?page=orders&status=pending" class="btn btn-warning">
                       <i class="fas fa-clock me-1"></i>Review Pending Orders
                     </a>
@@ -828,13 +924,161 @@ if ($action == "toggle_status" && $current_page === 'products') {
                     <a href="dashboard.php?page=customers" class="btn btn-info">
                       <i class="fas fa-users me-1"></i>Manage Customers
                     </a>
-                    <a href="dashboard.php?page=orders" class="btn btn-success">
-                      <i class="fas fa-list me-1"></i>View All Orders
+                    <a href="dashboard.php?page=messages" class="btn btn-success">
+                      <i class="fas fa-comments me-1"></i>View All Messages
                     </a>
                   </div>
                 </div>
               </div>
             </div>
+          </div>
+
+        <?php elseif ($current_page === 'messages'): ?>
+          <div class="page-header">
+            <div class="container-fluid">
+              <h1 class="page-title">Contact Messages</h1>
+              <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                  <li class="breadcrumb-item"><a href="dashboard.php" class="text-white">Dashboard</a></li>
+                  <li class="breadcrumb-item active">Messages</li>
+                </ol>
+              </nav>
+            </div>
+          </div>
+
+          <div class="container-fluid">
+            <div class="filter-section">
+              <div class="row align-items-center">
+                <div class="col-md-6">
+                  <h5 class="mb-0">Messages Overview</h5>
+                  <small class="text-muted">Total Messages: <?= count($contact_messages) ?></small>
+                </div>
+                <div class="col-md-6">
+                  <select class="form-select" id="status-filter" onchange="filterMessages()">
+                    <option value="all" <?= ($_GET['status'] ?? 'all') === 'all' ? 'selected' : '' ?>>All Messages</option>
+                    <option value="unread" <?= ($_GET['status'] ?? '') === 'unread' ? 'selected' : '' ?>>Unread</option>
+                    <option value="read" <?= ($_GET['status'] ?? '') === 'read' ? 'selected' : '' ?>>Read</option>
+                    <option value="replied" <?= ($_GET['status'] ?? '') === 'replied' ? 'selected' : '' ?>>Replied</option>
+                  </select>
+                </div>
+              </div>
+
+              <?php if (!empty($contact_messages)): ?>
+                <div class="row mt-3">
+                  <div class="col-12">
+                    <hr>
+                    <div class="d-flex align-items-center gap-3">
+                      <h6 class="mb-0">Bulk Actions:</h6>
+                      <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleSelectAllMessages()">
+                        <i class="fas fa-check-square"></i> Select All
+                      </button>
+                      <button type="button" class="btn btn-sm btn-outline-success" onclick="bulkMarkAsRead()" disabled
+                        id="bulk-read-btn">
+                        <i class="fas fa-eye"></i> Mark Selected as Read
+                      </button>
+                      <span class="text-muted small">Selected: <span id="selected-messages-count">0</span></span>
+                    </div>
+                  </div>
+                </div>
+              <?php endif; ?>
+            </div>
+
+            <?php if (empty($contact_messages)): ?>
+              <div class="stat-card text-center py-5">
+                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                <h4>No messages found</h4>
+                <p class="text-muted">No messages match the current filter.</p>
+              </div>
+            <?php else: ?>
+              <?php foreach ($contact_messages as $message): ?>
+                <?php $status_class = 'status-' . $message['status']; ?>
+                <div class="message-card">
+                  <div class="message-header">
+                    <div class="row align-items-center">
+                      <div class="col-md-1">
+                        <input type="checkbox" class="form-check-input message-checkbox" value="<?= $message['id'] ?>"
+                          onchange="updateMessageBulkActions()">
+                      </div>
+                      <div class="col-md-3">
+                        <h6 class="mb-1 fw-bold"><?= htmlspecialchars($message['name']) ?></h6>
+                        <small class="text-muted"><?= htmlspecialchars($message['email']) ?></small>
+                      </div>
+                      <div class="col-md-4">
+                        <h6 class="mb-1"><?= htmlspecialchars($message['subject']) ?></h6>
+                        <small class="text-muted"><?= date('M d, Y H:i', strtotime($message['date_submitted'])) ?></small>
+                      </div>
+                      <div class="col-md-2 text-center">
+                        <span class="status-badge <?= $status_class ?>">
+                          <?= ucfirst($message['status']) ?>
+                        </span>
+                      </div>
+                      <div class="col-md-2 text-end">
+                        <button class="btn btn-outline-primary quick-action-btn" data-bs-toggle="collapse"
+                          data-bs-target="#message-<?= $message['id'] ?>">
+                          <i class="fas fa-eye"></i> Details
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="collapse" id="message-<?= $message['id'] ?>">
+                    <div class="message-content">
+                      <div class="row">
+                        <div class="col-md-8">
+                          <h6><i class="fas fa-comment me-2"></i>Message:</h6>
+                          <div class="bg-light p-3 rounded">
+                            <p class="mb-0"><?= nl2br(htmlspecialchars($message['message'])) ?></p>
+                          </div>
+                          
+                          <?php if (!empty($message['admin_notes'])): ?>
+                            <div class="admin-note-section mt-3">
+                              <h6><i class="fas fa-sticky-note me-2"></i>Admin Notes:</h6>
+                              <p class="mb-0"><?= nl2br(htmlspecialchars($message['admin_notes'])) ?></p>
+                            </div>
+                          <?php endif; ?>
+                        </div>
+                        
+                        <div class="col-md-4">
+                          <h6><i class="fas fa-cog me-2"></i>Actions:</h6>
+                          <div class="d-flex flex-column gap-2">
+                            <?php if ($message['status'] === 'unread'): ?>
+                              <a href="dashboard.php?page=messages&action=mark_read&id=<?= $message['id'] ?>" 
+                                 class="btn btn-sm btn-success">
+                                <i class="fas fa-eye me-1"></i>Mark as Read
+                              </a>
+                            <?php endif; ?>
+                            
+                            <button class="btn btn-sm btn-info" data-bs-toggle="collapse" 
+                                    data-bs-target="#reply-<?= $message['id'] ?>">
+                              <i class="fas fa-reply me-1"></i>Add Note
+                            </button>
+                            
+                            <a href="dashboard.php?page=messages&action=delete&id=<?= $message['id'] ?>" 
+                               class="btn btn-sm btn-danger btn-delete-message">
+                              <i class="fas fa-trash me-1"></i>Delete
+                            </a>
+                          </div>
+                          
+                          <div class="collapse mt-3" id="reply-<?= $message['id'] ?>">
+                            <form method="POST">
+                              <input type="hidden" name="message_id" value="<?= $message['id'] ?>">
+                              <div class="mb-2">
+                                <textarea name="admin_note" class="form-control form-control-sm" 
+                                          rows="3" placeholder="Add admin note..."
+                                          ><?= htmlspecialchars($message['admin_notes'] ?? '') ?></textarea>
+                              </div>
+                              <button type="submit" name="add_admin_note" class="btn btn-sm btn-primary">
+                                <i class="fas fa-save me-1"></i>Save Note
+                              </button>
+                            </form>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              <?php endforeach; ?>
+            <?php endif; ?>
           </div>
 
         <?php elseif ($current_page === 'customers'): ?>
@@ -953,8 +1197,6 @@ if ($action == "toggle_status" && $current_page === 'products') {
                             onclick="resetCustomerPassword(<?= $customer['id'] ?>, '<?= htmlspecialchars($customer['fullname']) ?>')">
                             <i class="fas fa-key"></i> Reset
                           </button>
-                          <?php if ($customer['total_orders'] == 0): ?>
-                          <?php endif; ?>
                         </div>
                       </div>
                     </div>
@@ -1049,15 +1291,11 @@ if ($action == "toggle_status" && $current_page === 'products') {
                   <select class="form-select" id="status-filter" onchange="filterOrders()">
                     <option value="all" <?= ($_GET['status'] ?? 'all') === 'all' ? 'selected' : '' ?>>All Orders</option>
                     <option value="pending" <?= ($_GET['status'] ?? '') === 'pending' ? 'selected' : '' ?>>Pending</option>
-                    <option value="confirmed" <?= ($_GET['status'] ?? '') === 'confirmed' ? 'selected' : '' ?>>Confirmed
-                    </option>
-                    <option value="processing" <?= ($_GET['status'] ?? '') === 'processing' ? 'selected' : '' ?>>Processing
-                    </option>
+                    <option value="confirmed" <?= ($_GET['status'] ?? '') === 'confirmed' ? 'selected' : '' ?>>Confirmed</option>
+                    <option value="processing" <?= ($_GET['status'] ?? '') === 'processing' ? 'selected' : '' ?>>Processing</option>
                     <option value="shipped" <?= ($_GET['status'] ?? '') === 'shipped' ? 'selected' : '' ?>>Shipped</option>
-                    <option value="delivered" <?= ($_GET['status'] ?? '') === 'delivered' ? 'selected' : '' ?>>Delivered
-                    </option>
-                    <option value="cancelled" <?= ($_GET['status'] ?? '') === 'cancelled' ? 'selected' : '' ?>>Cancelled
-                    </option>
+                    <option value="delivered" <?= ($_GET['status'] ?? '') === 'delivered' ? 'selected' : '' ?>>Delivered</option>
+                    <option value="cancelled" <?= ($_GET['status'] ?? '') === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
                   </select>
                 </div>
               </div>
@@ -1089,8 +1327,7 @@ if ($action == "toggle_status" && $current_page === 'products') {
                   <div class="order-header">
                     <div class="row align-items-center">
                       <div class="col-md-2">
-                        <h6 class="mb-1 fw-bold">Invoice #<?= str_pad($transaction['id_transaction'], 6, '0', STR_PAD_LEFT) ?>
-                        </h6>
+                        <h6 class="mb-1 fw-bold">Invoice #<?= str_pad($transaction['id_transaction'], 6, '0', STR_PAD_LEFT) ?></h6>
                         <small class="text-muted"><?= date('M d, Y H:i', strtotime($transaction['date'])) ?></small>
                       </div>
                       <div class="col-md-3">
@@ -1099,8 +1336,7 @@ if ($action == "toggle_status" && $current_page === 'products') {
                       </div>
                       <div class="col-md-2 text-center">
                         <h5 class="mb-0 text-primary">IDR <?= number_format($transaction['total_price'], 0, ',', '.') ?></h5>
-                        <small
-                          class="text-muted"><?= ucwords(str_replace('_', ' ', $transaction['payment_method'])) ?></small>
+                        <small class="text-muted"><?= ucwords(str_replace('_', ' ', $transaction['payment_method'])) ?></small>
                       </div>
                       <div class="col-md-2 text-center">
                         <span class="status-badge <?= $status_class ?>">
@@ -1138,80 +1374,56 @@ if ($action == "toggle_status" && $current_page === 'products') {
                                   <div class="row align-items-center">
                                     <div class="col-md-6">
                                       <div class="d-flex align-items-center">
-                                        <div class="img me-3"
-                                          style="width: 50px; height: 50px; background-image: url('../images/<?= $item['photo'] ?>'); background-size: cover; background-position: center; border-radius: 5px;">
-                                        </div>
+                                        <img src="../images/<?= $item['photo'] ?>" alt="<?= htmlspecialchars($item['name']) ?>" 
+                                             class="me-3" style="width: 50px; height: 50px; object-fit: cover; border-radius: 8px;">
                                         <div>
                                           <h6 class="mb-1"><?= htmlspecialchars($item['name']) ?></h6>
-                                          <small class="text-muted">Quantity: <?= $item['amount'] ?></small>
+                                          <small class="text-muted">IDR <?= number_format($item['price'], 0, ',', '.') ?> each</small>
                                         </div>
                                       </div>
                                     </div>
-                                    <div class="col-md-3 text-right">
-                                      <span>IDR <?= number_format($item['price'], 0, ',', '.') ?></span>
+                                    <div class="col-md-3 text-center">
+                                      <span class="fw-bold"><?= $item['qty'] ?? $item['quantity'] ?? 1 ?>x</span>
                                     </div>
-                                    <div class="col-md-3 text-right">
-                                      <strong>IDR <?= number_format($item['price'] * $item['amount'], 0, ',', '.') ?></strong>
+                                    <div class="col-md-3 text-end">
+                                      <h6 class="mb-0 text-primary">IDR <?= number_format($item['price'] * ($item['qty'] ?? $item['quantity'] ?? 1), 0, ',', '.') ?></h6>
                                     </div>
                                   </div>
                                 </div>
                               <?php endforeach; ?>
-
-                              <div class="mt-3 pt-2 border-top">
-                                <div class="d-flex justify-content-between mb-1">
-                                  <span>Subtotal:</span>
-                                  <span>IDR <?= number_format($transaction['total_price'], 0, ',', '.') ?></span>
-                                </div>
-                                <div class="d-flex justify-content-between mb-1">
-                                  <span>Discount:</span>
-                                  <span>IDR 0</span>
-                                </div>
-                                <hr>
-                                <div class="d-flex justify-content-between fw-bold">
-                                  <span>Total:</span>
-                                  <span class="text-primary">IDR
-                                    <?= number_format($transaction['total_price'], 0, ',', '.') ?></span>
-                                </div>
-                              </div>
                             </div>
                           <?php else: ?>
-                            <div class="order-items-preview">
-                              <div class="text-center py-3">
-                                <i class="fas fa-shopping-basket fa-2x text-muted mb-2"></i>
-                                <p class="text-muted mb-0">Order items not available</p>
-                                <strong class="text-primary">Total: IDR
-                                  <?= number_format($transaction['total_price'], 0, ',', '.') ?></strong>
-                              </div>
+                            <div class="bg-light p-3 rounded">
+                              <p class="text-muted mb-0">No items found for this order.</p>
                             </div>
                           <?php endif; ?>
                         </div>
                       </div>
 
-                      <div class="row mt-4 pt-3 border-top">
-                        <div class="col-md-6">
-                          <form method="POST" class="d-flex align-items-center gap-2">
-                            <input type="hidden" name="order_id" value="<?= $transaction['id_transaction'] ?>">
-                            <label class="form-label mb-0 me-2">Status:</label>
-                            <select name="new_status" class="form-select form-select-sm">
-                              <option value="pending" <?= ($transaction['status'] ?? 'pending') === 'pending' ? 'selected' : '' ?>>Pending</option>
-                              <option value="confirmed" <?= ($transaction['status'] ?? '') === 'confirmed' ? 'selected' : '' ?>>
-                                Confirmed</option>
-                              <option value="processing" <?= ($transaction['status'] ?? '') === 'processing' ? 'selected' : '' ?>>Processing</option>
-                              <option value="shipped" <?= ($transaction['status'] ?? '') === 'shipped' ? 'selected' : '' ?>>
-                                Shipped</option>
-                              <option value="delivered" <?= ($transaction['status'] ?? '') === 'delivered' ? 'selected' : '' ?>>
-                                Delivered</option>
-                              <option value="cancelled" <?= ($transaction['status'] ?? '') === 'cancelled' ? 'selected' : '' ?>>
-                                Cancelled</option>
-                            </select>
-                            <button type="submit" name="update_order_status" class="btn btn-sm btn-primary">Update</button>
-                          </form>
-                        </div>
-                        <div class="col-md-6 text-end">
-                          <a href="../invoice.php?order_id=<?= $transaction['id_transaction'] ?>"
-                            class="btn btn-outline-secondary btn-sm" target="_blank">
-                            <i class="fas fa-file-invoice"></i> View Invoice
-                          </a>
+                      <div class="row mt-4">
+                        <div class="col-md-12">
+                          <h6><i class="fas fa-cog me-2"></i>Order Management:</h6>
+                          <div class="bg-light p-3 rounded">
+                            <form method="POST" class="d-flex align-items-center gap-3">
+                              <input type="hidden" name="order_id" value="<?= $transaction['id_transaction'] ?>">
+                              <div class="flex-grow-1">
+                                <label class="form-label mb-1">Update Status:</label>
+                                <select name="new_status" class="form-select">
+                                  <option value="pending" <?= ($transaction['status'] ?? 'pending') === 'pending' ? 'selected' : '' ?>>Pending</option>
+                                  <option value="confirmed" <?= ($transaction['status'] ?? '') === 'confirmed' ? 'selected' : '' ?>>Confirmed</option>
+                                  <option value="processing" <?= ($transaction['status'] ?? '') === 'processing' ? 'selected' : '' ?>>Processing</option>
+                                  <option value="shipped" <?= ($transaction['status'] ?? '') === 'shipped' ? 'selected' : '' ?>>Shipped</option>
+                                  <option value="delivered" <?= ($transaction['status'] ?? '') === 'delivered' ? 'selected' : '' ?>>Delivered</option>
+                                  <option value="cancelled" <?= ($transaction['status'] ?? '') === 'cancelled' ? 'selected' : '' ?>>Cancelled</option>
+                                </select>
+                              </div>
+                              <div class="align-self-end">
+                                <button type="submit" name="update_order_status" class="btn btn-primary">
+                                  <i class="fas fa-save me-1"></i>Update
+                                </button>
+                              </div>
+                            </form>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1224,7 +1436,7 @@ if ($action == "toggle_status" && $current_page === 'products') {
         <?php elseif ($current_page === 'products'): ?>
           <div class="page-header">
             <div class="container-fluid">
-              <h1 class="page-title">Products Management</h1>
+              <h1 class="page-title">Product Management</h1>
               <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
                   <li class="breadcrumb-item"><a href="dashboard.php" class="text-white">Dashboard</a></li>
@@ -1235,827 +1447,460 @@ if ($action == "toggle_status" && $current_page === 'products') {
           </div>
 
           <div class="container-fluid">
-            <!-- Product Form -->
-            <div class="product-form">
-              <h4 class="mb-4">
-                <i class="fas fa-<?= $action == 'edit' ? 'edit' : 'plus' ?> me-2"></i>
-                <?= $action == 'edit' ? 'Edit' : 'Add New' ?> Product
-              </h4>
-
-              <form method="POST" enctype="multipart/form-data">
-                <input type="hidden" name="product_action" value="1">
-                <div class="row">
-                  <div class="col-md-6">
-                    <div class="mb-3">
-                      <label class="form-label">Product Name</label>
-                      <input type="text" class="form-control" name="name" value="<?= @$name ?>"
-                        placeholder="Enter product name" required>
+            <?php if ($action == "edit" || $action == "add" || empty($action)): ?>
+              <div class="product-form">
+                <h5 class="mb-4">
+                  <i class="fas fa-<?= $action == "edit" ? "edit" : "plus" ?> me-2"></i>
+                  <?= $action == "edit" ? "Edit Product" : "Add New Product" ?>
+                </h5>
+                
+                <form method="POST" enctype="multipart/form-data">
+                  <input type="hidden" name="product_action" value="1">
+                  <div class="row">
+                    <div class="col-md-6">
+                      <div class="mb-3">
+                        <label class="form-label">Product Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" name="name" value="<?= htmlspecialchars($name) ?>" required>
+                      </div>
                     </div>
-                  </div>
-                  <div class="col-md-3">
-                    <div class="mb-3">
-                      <label class="form-label">Price (in thousands)</label>
-                      <div class="input-group">
-                        <span class="input-group-text">IDR</span>
-                        <input type="number" class="form-control" name="price" value="<?= @$price ?>" placeholder="25"
-                          required>
+                    <div class="col-md-6">
+                      <div class="mb-3">
+                        <label class="form-label">Price (IDR) <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" name="price" value="<?= $price ?>" min="0" step="0.01" required>
                       </div>
                     </div>
                   </div>
-                  <div class="col-md-3">
-                    <div class="mb-3">
-                      <label class="form-label">Stock</label>
-                      <input type="number" class="form-control" name="stock" value="<?= @$stock ?>" placeholder="100"
-                        required>
+                  
+                  <div class="row">
+                    <div class="col-md-6">
+                      <div class="mb-3">
+                        <label class="form-label">Stock Quantity <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" name="stock" value="<?= $stock ?>" min="0" required>
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="mb-3">
+                        <label class="form-label">Category <span class="text-danger">*</span></label>
+                        <select class="form-select" name="category" required>
+                          <option value="">Select Category</option>
+                          <?php
+                          $categories_result = mysqli_query($db, "SELECT * FROM category ORDER BY name");
+                          while ($cat = mysqli_fetch_assoc($categories_result)): ?>
+                            <option value="<?= $cat['id'] ?>" <?= $category == $cat['id'] ? 'selected' : '' ?>>
+                              <?= htmlspecialchars($cat['name']) ?>
+                            </option>
+                          <?php endwhile; ?>
+                        </select>
+                      </div>
                     </div>
                   </div>
-                </div>
-
-                <div class="row">
-                  <div class="col-md-6">
-                    <div class="mb-3">
-                      <label class="form-label">Product Photo</label>
-                      <input class="form-control" type="file" name="photo" accept="image/*">
+                  
+                  <div class="row">
+                    <div class="col-md-6">
+                      <div class="mb-3">
+                        <label class="form-label">Product Image <?= $action != "edit" ? '<span class="text-danger">*</span>' : '(Leave empty to keep current)' ?></label>
+                        <input type="file" class="form-control" name="photo" accept="image/*" <?= $action != "edit" ? 'required' : '' ?>>
+                        <?php if ($action == "edit" && !empty($photo)): ?>
+                          <small class="text-muted">Current: <?= htmlspecialchars($photo) ?></small>
+                        <?php endif; ?>
+                      </div>
+                    </div>
+                    <div class="col-md-6">
                       <?php if ($action == "edit" && !empty($photo)): ?>
-                        <div class="mt-2">
-                          <small class="text-muted">Current photo:</small><br>
-                          <img src="../images/<?= $photo ?>" width="80" class="rounded border" alt="Current Photo">
+                        <div class="mb-3">
+                          <label class="form-label">Current Image</label>
+                          <div>
+                            <img src="../images/<?= $photo ?>" alt="Current product image" 
+                                 style="max-width: 100px; max-height: 100px; object-fit: cover; border-radius: 8px;">
+                          </div>
                         </div>
                       <?php endif; ?>
                     </div>
                   </div>
-                  <div class="col-md-6">
-                    <div class="mb-3">
-                      <label class="form-label">Category</label>
-                      <select class="form-select" name="category" required>
-                        <option value="" disabled <?= !isset($category) ? 'selected' : '' ?>>Select Category</option>
-                        <?php
-                        $catResult = mysqli_query($db, "SELECT * FROM category");
-                        while ($cat = mysqli_fetch_assoc($catResult)) {
-                          $selected = (isset($category) && $category == $cat['id_category']) ? "selected" : "";
-                          echo "<option value='{$cat['id_category']}' {$selected}>{$cat['category_name']}</option>";
-                        }
-                        ?>
-                      </select>
-                    </div>
+                  
+                  <div class="mb-3">
+                    <label class="form-label">Product Description</label>
+                    <textarea class="form-control" name="description" rows="4" placeholder="Enter product description..."><?= htmlspecialchars($description) ?></textarea>
                   </div>
-                </div>
-
-                <div class="mb-3">
-                  <label class="form-label">Description</label>
-                  <textarea class="form-control" name="description" rows="3" placeholder="Enter product description"
-                    required><?= @$description ?></textarea>
-                </div>
-
-                <div class="d-flex gap-2">
-                  <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save me-1"></i><?= $action == 'edit' ? 'Update' : 'Add' ?> Product
-                  </button>
-                  <?php if ($action == 'edit'): ?>
+                  
+                  <div class="d-flex justify-content-end gap-2">
                     <a href="dashboard.php?page=products" class="btn btn-secondary">
                       <i class="fas fa-times me-1"></i>Cancel
                     </a>
-                  <?php endif; ?>
+                    <button type="submit" class="btn btn-primary">
+                      <i class="fas fa-save me-1"></i><?= $action == "edit" ? "Update Product" : "Add Product" ?>
+                    </button>
+                  </div>
+                </form>
+              </div>
+            <?php endif; ?>
+
+            <?php if ($action != "edit" && $action != "add"): ?>
+              <div class="filter-section">
+                <div class="row align-items-center">
+                  <div class="col-md-6">
+                    <h5 class="mb-0">Products Overview</h5>
+                    <small class="text-muted">Manage your product catalog</small>
+                  </div>
+                  <div class="col-md-6 text-end">
+                    <a href="dashboard.php?page=products&action=add" class="btn btn-primary">
+                      <i class="fas fa-plus me-1"></i>Add New Product
+                    </a>
+                  </div>
                 </div>
-              </form>
-            </div>
-
-            <!-- Products List -->
-            <div class="stat-card">
-              <div class="d-flex justify-content-between align-items-center mb-4">
-                <h4 class="mb-0"><i class="fas fa-list me-2"></i>Products List</h4>
-                <a href="dashboard.php?page=products" class="btn btn-primary">
-                  <i class="fas fa-plus me-1"></i>Add New Product
-                </a>
               </div>
 
-              <div class="table-responsive">
-                <table class="table table-hover">
-                  <thead>
-                    <tr>
-                      <th>No</th>
-                      <th>Photo</th>
-                      <th>Name</th>
-                      <th>Price</th>
-                      <th>Stock</th>
-                      <th>Category</th>
-                      <th>Description</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <?php
-                    $no = 1;
-                    $result = mysqli_query(
-                      $db,
-                      "SELECT p.*, c.category_name 
-                      FROM product p 
-                      JOIN category c ON p.id_category = c.id_category 
-                      ORDER BY p.id DESC"
-                    );
+              <?php
+              $products_result = mysqli_query($db, "SELECT p.*, c.name as category_name FROM product p LEFT JOIN category c ON p.id_category = c.id ORDER BY p.id DESC");
+              $products = [];
+              while ($row = mysqli_fetch_assoc($products_result)) {
+                $products[] = $row;
+              }
+              ?>
 
-                    while ($row = mysqli_fetch_assoc($result)) {
-                      echo "<tr>
-                        <td class='fw-bold'>{$no}</td>
-                        <td><img src='../images/{$row['photo']}' width='50' height='50' class='rounded object-fit-cover' style='object-fit: cover;'></td>
-                        <td class='fw-bold'>{$row['name']}</td>
-                        <td><span class='badge bg-success'>IDR " . number_format($row['price'], 0, ',', '.') . "</span></td>
-                        <td><span class='badge bg-info'>{$row['stock']}</span></td>
-                        <td><span class='badge bg-secondary'>{$row['category_name']}</span></td>
-                        <td><small>" . substr($row['description'], 0, 50) . "...</small></td>
-                        <td>
-                          <a href='dashboard.php?page=products&action=edit&id={$row['id']}' class='btn btn-sm btn-warning me-1'>
-                            <i class='fas fa-edit'></i>
-                          </a>
-                          <a href='dashboard.php?page=products&action=delete&id={$row['id']}' class='btn btn-sm btn-danger btn-delete'>
-                            <i class='fas fa-trash'></i>
-                          </a>
-                        </td>
-                      </tr>";
-                      $no++;
-                    }
-                    ?>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+              <?php if (empty($products)): ?>
+                <div class="stat-card text-center py-5">
+                  <i class="fas fa-box fa-3x text-muted mb-3"></i>
+                  <h4>No products found</h4>
+                  <p class="text-muted">Start by adding your first product.</p>
+                  <a href="dashboard.php?page=products&action=add" class="btn btn-primary">
+                    <i class="fas fa-plus me-1"></i>Add Product
+                  </a>
+                </div>
+              <?php else: ?>
+                <div class="table-responsive">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>Image</th>
+                        <th>Product Details</th>
+                        <th>Category</th>
+                        <th>Price</th>
+                        <th>Stock</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <?php foreach ($products as $product): ?>
+                        <tr>
+                          <td>
+                            <img src="../images/<?= $product['photo'] ?>" alt="<?= htmlspecialchars($product['name']) ?>" 
+                                 style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px;">
+                          </td>
+                          <td>
+                            <h6 class="mb-1"><?= htmlspecialchars($product['name']) ?></h6>
+                            <?php if (!empty($product['description'])): ?>
+                              <small class="text-muted"><?= htmlspecialchars(substr($product['description'], 0, 100)) ?><?= strlen($product['description']) > 100 ? '...' : '' ?></small>
+                            <?php endif; ?>
+                          </td>
+                          <td>
+                            <span class="badge bg-secondary"><?= htmlspecialchars($product['category_name'] ?? 'No Category') ?></span>
+                          </td>
+                          <td>
+                            <h6 class="mb-0 text-primary">IDR <?= number_format($product['price'], 0, ',', '.') ?></h6>
+                          </td>
+                          <td>
+                            <span class="badge bg-<?= $product['stock'] > 0 ? ($product['stock'] > 10 ? 'success' : 'warning') : 'danger' ?>">
+                              <?= $product['stock'] ?> units
+                            </span>
+                          </td>
+                          <td>
+                            <?php
+                            $has_status = isset($product['status']);
+                            $status = $has_status ? $product['status'] : 'active';
+                            $status_class = $status === 'active' ? 'success' : 'secondary';
+                            ?>
+                            <span class="badge bg-<?= $status_class ?>">
+                              <?= ucfirst($status) ?>
+                            </span>
+                          </td>
+                          <td>
+                            <div class="btn-group">
+                              <a href="dashboard.php?page=products&action=edit&id=<?= $product['id'] ?>" 
+                                 class="btn btn-outline-primary btn-sm">
+                                <i class="fas fa-edit"></i>
+                              </a>
+                              <?php if ($has_status): ?>
+                                <a href="dashboard.php?page=products&action=toggle_status&id=<?= $product['id'] ?>" 
+                                   class="btn btn-outline-warning btn-sm">
+                                  <i class="fas fa-<?= $status === 'active' ? 'eye-slash' : 'eye' ?>"></i>
+                                </a>
+                              <?php endif; ?>
+                              <a href="dashboard.php?page=products&action=delete&id=<?= $product['id'] ?>" 
+                                 class="btn btn-outline-danger btn-sm btn-delete-product">
+                                <i class="fas fa-trash"></i>
+                              </a>
+                            </div>
+                          </td>
+                        </tr>
+                      <?php endforeach; ?>
+                    </tbody>
+                  </table>
+                </div>
+              <?php endif; ?>
+            <?php endif; ?>
           </div>
 
         <?php endif; ?>
+
       </main>
     </div>
   </div>
 
   <!-- Bootstrap JS -->
   <script src="../assets/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/feather-icons@4.28.0/dist/feather.min.js"></script>
 
+  <!-- Custom JavaScript -->
   <script>
-    feather.replace();
+    // Alert handling
+    <?php if (isset($_SESSION['alert'])): ?>
+      Swal.fire({
+        title: 'Success!',
+        text: '<?= $_SESSION['alert'] ?>',
+        icon: 'success',
+        confirmButtonColor: '#f96d00'
+      });
+      <?php unset($_SESSION['alert']); ?>
+    <?php endif; ?>
 
+    <?php if (isset($_SESSION['error'])): ?>
+      Swal.fire({
+        title: 'Error!',
+        text: '<?= $_SESSION['error'] ?>',
+        icon: 'error',
+        confirmButtonColor: '#f96d00'
+      });
+      <?php unset($_SESSION['error']); ?>
+    <?php endif; ?>
+
+    // Bulk reset results
+    <?php if (isset($_SESSION['bulk_reset_results'])): ?>
+      let resetResults = <?= json_encode($_SESSION['bulk_reset_results']) ?>;
+      let successCount = resetResults.filter(r => r.success).length;
+      let failCount = resetResults.filter(r => !r.success).length;
+      
+      let resultText = `Successfully reset ${successCount} password(s)`;
+      if (failCount > 0) {
+        resultText += `, ${failCount} failed`;
+      }
+      
+      let detailsHtml = '<div class="text-start mt-3"><small>';
+      resetResults.forEach(result => {
+        if (result.success) {
+          detailsHtml += `<strong>${result.name}:</strong> ${result.password}<br>`;
+        } else {
+          detailsHtml += `<strong>${result.name}:</strong> Failed<br>`;
+        }
+      });
+      detailsHtml += '</small></div>';
+      
+      Swal.fire({
+        title: 'Bulk Password Reset Complete',
+        html: resultText + detailsHtml,
+        icon: successCount > 0 ? 'success' : 'error',
+        confirmButtonColor: '#f96d00',
+        width: '600px'
+      });
+      <?php unset($_SESSION['bulk_reset_results']); ?>
+    <?php endif; ?>
+
+    // Filter functions
     function filterOrders() {
-      var status = document.getElementById('status-filter').value;
-      window.location.href = 'dashboard.php?page=orders&status=' + status;
+      const status = document.getElementById('status-filter').value;
+      window.location.href = `dashboard.php?page=orders&status=${status}`;
     }
 
-    function confirmDeleteCustomer(customerId, customerName) {
-      Swal.fire({
-        title: 'Delete Customer?',
-        text: `Are you sure you want to delete "${customerName}"? This action cannot be undone.`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#6c757d',
-        confirmButtonText: 'Yes, delete customer',
-        cancelButtonText: 'Cancel'
-      }).then((result) => {
-        if (result.isConfirmed) {
-          Swal.fire({
-            title: 'Deleting customer...',
-            allowOutsideClick: false,
-            didOpen: () => {
-              Swal.showLoading();
-            }
-          });
-
-          window.location.href = `dashboard.php?page=customers&action=delete&id=${customerId}`;
-        }
-      });
+    function filterMessages() {
+      const status = document.getElementById('status-filter').value;
+      window.location.href = `dashboard.php?page=messages&status=${status}`;
     }
 
-    function resetCustomerPassword(customerId, customerName) {
-      Swal.fire({
-        title: 'Reset Password?',
-        html: `Are you sure you want to reset the password for "<strong>${customerName}</strong>"?<br><br>
-               <small class="text-muted">A new random password will be generated and displayed to you.</small>`,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonColor: '#ffc107',
-        cancelButtonColor: '#6c757d',
-        confirmButtonText: 'Yes, reset password',
-        cancelButtonText: 'Cancel'
-      }).then((result) => {
-        if (result.isConfirmed) {
-          Swal.fire({
-            title: 'Resetting password...',
-            allowOutsideClick: false,
-            didOpen: () => {
-              Swal.showLoading();
-            }
-          });
-
-          window.location.href = `dashboard.php?page=customers&action=reset_password&id=${customerId}`;
-        }
-      });
-    }
-
+    // Customer bulk actions
     function toggleSelectAll() {
       const checkboxes = document.querySelectorAll('.customer-checkbox');
       const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-
+      
       checkboxes.forEach(cb => {
         cb.checked = !allChecked;
       });
-
+      
       updateBulkActions();
     }
 
     function updateBulkActions() {
-      const selectedCheckboxes = document.querySelectorAll('.customer-checkbox:checked');
-      const selectedCount = selectedCheckboxes.length;
-      const bulkResetBtn = document.getElementById('bulk-reset-btn');
-      const selectedCountSpan = document.getElementById('selected-count');
-
-      selectedCountSpan.textContent = selectedCount;
-
-      if (selectedCount > 0) {
-        bulkResetBtn.disabled = false;
-        bulkResetBtn.classList.remove('btn-outline-warning');
-        bulkResetBtn.classList.add('btn-warning');
+      const checkedBoxes = document.querySelectorAll('.customer-checkbox:checked');
+      const bulkBtn = document.getElementById('bulk-reset-btn');
+      const countSpan = document.getElementById('selected-count');
+      
+      if (checkedBoxes.length > 0) {
+        bulkBtn.disabled = false;
+        countSpan.textContent = checkedBoxes.length;
       } else {
-        bulkResetBtn.disabled = true;
-        bulkResetBtn.classList.remove('btn-warning');
-        bulkResetBtn.classList.add('btn-outline-warning');
+        bulkBtn.disabled = true;
+        countSpan.textContent = '0';
       }
     }
 
     function bulkResetPassword() {
-      const selectedCheckboxes = document.querySelectorAll('.customer-checkbox:checked');
-      const selectedCount = selectedCheckboxes.length;
-
-      if (selectedCount === 0) {
-        Swal.fire({
-          icon: 'warning',
-          title: 'No Selection',
-          text: 'Please select at least one customer to reset passwords.',
-        });
+      const checkedBoxes = document.querySelectorAll('.customer-checkbox:checked');
+      const customerIds = Array.from(checkedBoxes).map(cb => cb.value);
+      
+      if (customerIds.length === 0) {
+        Swal.fire('Error!', 'Please select customers first.', 'error');
         return;
       }
-
+      
       Swal.fire({
-        title: 'Bulk Password Reset?',
-        html: `Are you sure you want to reset passwords for <strong>${selectedCount}</strong> selected customers?<br><br>
-               <small class="text-muted">New random passwords will be generated for all selected customers.</small>`,
-        icon: 'question',
+        title: 'Confirm Bulk Password Reset',
+        text: `Are you sure you want to reset passwords for ${customerIds.length} customer(s)?`,
+        icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#ffc107',
+        confirmButtonColor: '#f96d00',
         cancelButtonColor: '#6c757d',
-        confirmButtonText: `Yes, reset ${selectedCount} passwords`,
-        cancelButtonText: 'Cancel'
+        confirmButtonText: 'Yes, Reset Passwords'
       }).then((result) => {
         if (result.isConfirmed) {
-          Swal.fire({
-            title: 'Resetting passwords...',
-            html: 'Please wait while passwords are being reset...',
-            allowOutsideClick: false,
-            didOpen: () => {
-              Swal.showLoading();
-            }
-          });
-
           const form = document.createElement('form');
           form.method = 'POST';
           form.style.display = 'none';
-
-          selectedCheckboxes.forEach(cb => {
+          
+          customerIds.forEach(id => {
             const input = document.createElement('input');
             input.type = 'hidden';
             input.name = 'customer_ids[]';
-            input.value = cb.value;
+            input.value = id;
             form.appendChild(input);
           });
-
-          const bulkInput = document.createElement('input');
-          bulkInput.type = 'hidden';
-          bulkInput.name = 'bulk_password_reset';
-          bulkInput.value = '1';
-          form.appendChild(bulkInput);
-
+          
+          const submitInput = document.createElement('input');
+          submitInput.type = 'hidden';
+          submitInput.name = 'bulk_password_reset';
+          submitInput.value = '1';
+          form.appendChild(submitInput);
+          
           document.body.appendChild(form);
           form.submit();
-        }
-      });
-    }
-
-    document.querySelectorAll('.btn-delete').forEach(function (button) {
-      button.addEventListener('click', function (e) {
-        e.preventDefault();
-        const href = this.getAttribute('href');
-
-        Swal.fire({
-          title: 'Are you sure?',
-          text: "This product will be permanently deleted!",
-          icon: 'warning',
-          showCancelButton: true,
-          confirmButtonColor: '#d33',
-          cancelButtonColor: '#3085d6',
-          confirmButtonText: 'Yes, delete it!',
-          cancelButtonText: 'Cancel'
-        }).then((result) => {
-          if (result.isConfirmed) {
-            window.location.href = href;
-          }
-        });
-      });
-    });
-
-    document.addEventListener('DOMContentLoaded', function () {
-      const searchInput = document.querySelector('input[name="search"]');
-      if (searchInput) {
-        searchInput.addEventListener('keypress', function (e) {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            this.closest('form').submit();
-          }
-        });
-      }
-
-      document.querySelectorAll('.stat-card').forEach(function (card) {
-        card.addEventListener('mouseenter', function () {
-          this.style.transform = 'translateY(-4px)';
-        });
-
-        card.addEventListener('mouseleave', function () {
-          this.style.transform = 'translateY(-2px)';
-        });
-      });
-    });
-  </script>
-
-  <?php if (isset($_SESSION['alert'])): ?>
-    <script>
-      Swal.fire({
-        icon: 'success',
-        title: 'Success!',
-        text: '<?= $_SESSION['alert'] ?>',
-        timer: 3000,
-        timerProgressBar: true,
-        showConfirmButton: false,
-        toast: true,
-        position: 'top-end'
-      });
-    </script>
-    <?php unset($_SESSION['alert']); ?>
-  <?php endif; ?>
-
-  <?php if (isset($_SESSION['error'])): ?>
-    <script>
-      Swal.fire({
-        icon: 'error',
-        title: 'Oops...',
-        text: '<?= $_SESSION['error'] ?>',
-        confirmButtonColor: '#F96D00',
-        timer: 5000,
-        timerProgressBar: true,
-        toast: true,
-        position: 'top-end'
-      });
-    </script>
-    <?php unset($_SESSION['error']); ?>
-  <?php endif; ?>
-
-  <?php if (isset($_SESSION['reset_password'])): ?>
-    <script>
-      Swal.fire({
-        icon: 'success',
-        title: 'Password Reset Successfully!',
-        html: `
-          <div class="text-start">
-            <p class="mb-3"><strong>New Password:</strong></p>
-            <div class="alert alert-warning d-flex align-items-center justify-content-between">
-              <code style="font-size: 16px; color: #856404; font-weight: bold;"><?= $_SESSION['reset_password'] ?></code>
-              <button type="button" class="btn btn-sm btn-outline-warning" onclick="copyToClipboard('<?= $_SESSION['reset_password'] ?>')">
-                <i class="fas fa-copy me-1"></i> Copy
-              </button>
-            </div>
-            <div class="alert alert-info mb-0">
-              <small><i class="fas fa-info-circle me-1"></i>Please save this password and provide it to the customer. They should change it after logging in.</small>
-            </div>
-          </div>
-        `,
-        confirmButtonText: 'Got it!',
-        confirmButtonColor: '#F96D00',
-        allowOutsideClick: false,
-        customClass: {
-          popup: 'text-start',
-          htmlContainer: 'text-start'
-        },
-        width: 500
-      });
-
-      function copyToClipboard(text) {
-        navigator.clipboard.writeText(text).then(() => {
-          Swal.fire({
-            icon: 'success',
-            title: 'Copied!',
-            text: 'Password copied to clipboard',
-            timer: 2000,
-            timerProgressBar: true,
-            showConfirmButton: false,
-            toast: true,
-            position: 'top-end'
-          });
-        }).catch(() => {
-          const textArea = document.createElement('textarea');
-          textArea.value = text;
-          document.body.appendChild(textArea);
-          textArea.select();
-          document.execCommand('copy');
-          document.body.removeChild(textArea);
-
-          Swal.fire({
-            icon: 'success',
-            title: 'Copied!',
-            text: 'Password copied to clipboard',
-            timer: 2000,
-            timerProgressBar: true,
-            showConfirmButton: false,
-            toast: true,
-            position: 'top-end'
-          });
-        });
-      }
-    </script>
-    <?php unset($_SESSION['reset_password']); ?>
-  <?php endif; ?>
-
-  <?php if (isset($_SESSION['bulk_reset_results'])): ?>
-    <script>
-      let resultsHtml = '<div class="text-start"><h6 class="mb-3"><i class="fas fa-list-check me-2"></i>Password Reset Results:</h6>';
-      let successCount = 0;
-      let failureCount = 0;
-
-      <?php foreach ($_SESSION['bulk_reset_results'] as $result): ?>
-        <?php if ($result['success']): ?>
-          resultsHtml += `
-            <div class="alert alert-success d-flex align-items-center justify-content-between p-2 mb-2">
-              <div class="d-flex align-items-center">
-                <i class="fas fa-check-circle text-success me-2"></i>
-                <span><strong><?= htmlspecialchars($result['name']) ?></strong></span>
-              </div>
-              <div class="d-flex align-items-center">
-                <code class="me-2 px-2 py-1 bg-light border rounded"><?= $result['password'] ?></code>
-                <button type="button" class="btn btn-sm btn-outline-success" onclick="copyToClipboard('<?= $result['password'] ?>')">
-                  <i class="fas fa-copy"></i>
-                </button>
-              </div>
-            </div>
-          `;
-          successCount++;
-        <?php else: ?>
-          resultsHtml += `
-            <div class="alert alert-danger d-flex align-items-center p-2 mb-2">
-              <i class="fas fa-times-circle text-danger me-2"></i>
-              <span><strong><?= htmlspecialchars($result['name']) ?>:</strong> Failed to reset password</span>
-            </div>
-          `;
-          failureCount++;
-        <?php endif; ?>
-      <?php endforeach; ?>
-
-      resultsHtml += `
-        <div class="mt-3 p-3 bg-light rounded">
-          <div class="row text-center">
-            <div class="col-6">
-              <div class="text-success">
-                <i class="fas fa-check-circle fa-2x mb-1"></i>
-                <div><strong>${successCount}</strong></div>
-                <small>Successful</small>
-              </div>
-            </div>
-            <div class="col-6">
-              <div class="text-danger">
-                <i class="fas fa-times-circle fa-2x mb-1"></i>
-                <div><strong>${failureCount}</strong></div>
-                <small>Failed</small>
-              </div>
-            </div>
-          </div>
-          <hr>
-          <small class="text-muted"><i class="fas fa-exclamation-triangle me-1"></i>Please save these passwords and provide them to the respective customers.</small>
-        </div>
-      </div>`;
-
-      Swal.fire({
-        icon: successCount > failureCount ? 'success' : failureCount > 0 ? 'warning' : 'success',
-        title: 'Bulk Password Reset Complete',
-        html: resultsHtml,
-        confirmButtonText: 'Got it!',
-        confirmButtonColor: '#F96D00',
-        allowOutsideClick: false,
-        customClass: {
-          popup: 'swal-wide',
-          htmlContainer: 'text-start'
-        },
-        width: 800
-      });
-
-      function copyToClipboard(text) {
-        navigator.clipboard.writeText(text).then(() => {
-          Swal.fire({
-            icon: 'success',
-            title: 'Copied!',
-            text: 'Password copied to clipboard',
-            timer: 2000,
-            timerProgressBar: true,
-            showConfirmButton: false,
-            toast: true,
-            position: 'top-end'
-          });
-        }).catch(() => {
-          const textArea = document.createElement('textarea');
-          textArea.value = text;
-          document.body.appendChild(textArea);
-          textArea.select();
-          document.execCommand('copy');
-          document.body.removeChild(textArea);
-
-          Swal.fire({
-            icon: 'success',
-            title: 'Copied!',
-            text: 'Password copied to clipboard',
-            timer: 2000,
-            timerProgressBar: true,
-            showConfirmButton: false,
-            toast: true,
-            position: 'top-end'
-          });
-        });
-      }
-
-      const style = document.createElement('style');
-      style.textContent = `
-        .swal-wide {
-          max-width: 90vw !important;
-        }
-        .swal-wide .alert {
-          font-size: 14px;
-          border-radius: 8px;
-        }
-        .swal-wide code {
-          background: rgba(249, 109, 0, 0.1) !important;
-          color: #F96D00 !important;
-          font-weight: bold;
-          border: 1px solid rgba(249, 109, 0, 0.2);
-        }
-        .swal-wide .btn-outline-success:hover {
-          transform: scale(1.05);
-        }
-        .swal-wide .bg-light {
-          background-color: #f8f9fa !important;
-        }
-      `;
-      document.head.appendChild(style);
-    </script>
-    <?php unset($_SESSION['bulk_reset_results']); ?>
-  <?php endif; ?>
-
-  <script>
-
-    function confirmDeleteCustomer(customerId, customerName) {
-      Swal.fire({
-        title: 'Delete Customer?',
-        html: `Are you sure you want to delete "<strong>${customerName}</strong>"?<br><br>
-               <div class="alert alert-warning mt-3">
-                 <i class="fas fa-exclamation-triangle me-2"></i>
-                 This action cannot be undone.
-               </div>`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#dc3545',
-        cancelButtonColor: '#6c757d',
-        confirmButtonText: '<i class="fas fa-trash me-1"></i>Yes, delete customer',
-        cancelButtonText: '<i class="fas fa-times me-1"></i>Cancel',
-        customClass: {
-          confirmButton: 'btn btn-danger',
-          cancelButton: 'btn btn-secondary'
-        },
-        buttonsStyling: false
-      }).then((result) => {
-        if (result.isConfirmed) {
-          Swal.fire({
-            title: 'Deleting customer...',
-            html: '<div class="text-center"><i class="fas fa-spinner fa-spin fa-2x text-danger mb-3"></i><br>Please wait while we delete the customer.</div>',
-            allowOutsideClick: false,
-            showConfirmButton: false,
-            customClass: {
-              popup: 'swal-loading'
-            }
-          });
-
-          window.location.href = `dashboard.php?page=customers&action=delete&id=${customerId}`;
         }
       });
     }
 
     function resetCustomerPassword(customerId, customerName) {
       Swal.fire({
-        title: 'Reset Password?',
-        html: `Are you sure you want to reset the password for "<strong>${customerName}</strong>"?<br><br>
-               <div class="alert alert-info mt-3">
-                 <i class="fas fa-info-circle me-2"></i>
-                 A new random password will be generated and displayed to you.
-               </div>`,
-        icon: 'question',
+        title: 'Reset Password',
+        text: `Are you sure you want to reset the password for ${customerName}?`,
+        icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#F96D00',
+        confirmButtonColor: '#f96d00',
         cancelButtonColor: '#6c757d',
-        confirmButtonText: '<i class="fas fa-key me-1"></i>Yes, reset password',
-        cancelButtonText: '<i class="fas fa-times me-1"></i>Cancel',
-        customClass: {
-          confirmButton: 'btn btn-warning',
-          cancelButton: 'btn btn-secondary'
-        },
-        buttonsStyling: false
+        confirmButtonText: 'Yes, Reset Password'
       }).then((result) => {
         if (result.isConfirmed) {
-          Swal.fire({
-            title: 'Resetting password...',
-            html: '<div class="text-center"><i class="fas fa-spinner fa-spin fa-2x text-warning mb-3"></i><br>Please wait while we generate a new password.</div>',
-            allowOutsideClick: false,
-            showConfirmButton: false,
-            customClass: {
-              popup: 'swal-loading'
-            }
-          });
-
           window.location.href = `dashboard.php?page=customers&action=reset_password&id=${customerId}`;
         }
       });
     }
 
-    function bulkResetPassword() {
-      const selectedCheckboxes = document.querySelectorAll('.customer-checkbox:checked');
-      const selectedCount = selectedCheckboxes.length;
-
-      if (selectedCount === 0) {
-        Swal.fire({
-          icon: 'warning',
-          title: 'No Selection',
-          text: 'Please select at least one customer to reset passwords.',
-          confirmButtonColor: '#F96D00',
-          toast: true,
-          position: 'top-end',
-          timer: 3000,
-          timerProgressBar: true,
-          showConfirmButton: false
-        });
-        return;
-      }
-
-      Swal.fire({
-        title: 'Bulk Password Reset?',
-        html: `Are you sure you want to reset passwords for <strong>${selectedCount}</strong> selected customers?<br><br>
-               <div class="alert alert-info mt-3">
-                 <i class="fas fa-info-circle me-2"></i>
-                 New random passwords will be generated for all selected customers.
-               </div>`,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonColor: '#F96D00',
-        cancelButtonColor: '#6c757d',
-        confirmButtonText: `<i class="fas fa-key me-1"></i>Yes, reset ${selectedCount} passwords`,
-        cancelButtonText: '<i class="fas fa-times me-1"></i>Cancel',
-        customClass: {
-          confirmButton: 'btn btn-warning',
-          cancelButton: 'btn btn-secondary'
-        },
-        buttonsStyling: false
-      }).then((result) => {
-        if (result.isConfirmed) {
-          Swal.fire({
-            title: 'Resetting passwords...',
-            html: `
-              <div class="text-center">
-                <i class="fas fa-spinner fa-spin fa-2x text-warning mb-3"></i>
-                <br>
-                <div class="progress mb-3" style="height: 6px;">
-                  <div class="progress-bar progress-bar-striped progress-bar-animated bg-warning" style="width: 100%"></div>
-                </div>
-                Processing ${selectedCount} customer passwords...
-              </div>
-            `,
-            allowOutsideClick: false,
-            showConfirmButton: false,
-            customClass: {
-              popup: 'swal-loading'
-            }
-          });
-
-          const form = document.createElement('form');
-          form.method = 'POST';
-          form.style.display = 'none';
-
-          selectedCheckboxes.forEach(cb => {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'customer_ids[]';
-            input.value = cb.value;
-            form.appendChild(input);
-          });
-
-          const bulkInput = document.createElement('input');
-          bulkInput.type = 'hidden';
-          bulkInput.name = 'bulk_password_reset';
-          bulkInput.value = '1';
-          form.appendChild(bulkInput);
-
-          document.body.appendChild(form);
-          form.submit();
-        }
+    // Message bulk actions
+    function toggleSelectAllMessages() {
+      const checkboxes = document.querySelectorAll('.message-checkbox');
+      const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+      
+      checkboxes.forEach(cb => {
+        cb.checked = !allChecked;
       });
+      
+      updateMessageBulkActions();
     }
 
-    document.querySelectorAll('.btn-delete').forEach(function (button) {
-      button.addEventListener('click', function (e) {
-        e.preventDefault();
-        const href = this.getAttribute('href');
+    function updateMessageBulkActions() {
+      const checkedBoxes = document.querySelectorAll('.message-checkbox:checked');
+      const bulkBtn = document.getElementById('bulk-read-btn');
+      const countSpan = document.getElementById('selected-messages-count');
+      
+      if (checkedBoxes.length > 0) {
+        bulkBtn.disabled = false;
+        countSpan.textContent = checkedBoxes.length;
+      } else {
+        bulkBtn.disabled = true;
+        countSpan.textContent = '0';
+      }
+    }
 
+    function bulkMarkAsRead() {
+      const checkedBoxes = document.querySelectorAll('.message-checkbox:checked');
+      const messageIds = Array.from(checkedBoxes).map(cb => cb.value);
+      
+      if (messageIds.length === 0) {
+        Swal.fire('Error!', 'Please select messages first.', 'error');
+        return;
+      }
+      
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.style.display = 'none';
+      
+      messageIds.forEach(id => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'message_ids[]';
+        input.value = id;
+        form.appendChild(input);
+      });
+      
+      const submitInput = document.createElement('input');
+      submitInput.type = 'hidden';
+      submitInput.name = 'bulk_mark_read';
+      submitInput.value = '1';
+      form.appendChild(submitInput);
+      
+      document.body.appendChild(form);
+      form.submit();
+    }
+
+    // Delete confirmations
+    document.querySelectorAll('.btn-delete-product').forEach(btn => {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        const href = this.href;
+        
         Swal.fire({
-          title: 'Delete Product?',
-          html: `
-            <div class="text-center mb-3">
-              <i class="fas fa-box-open fa-3x text-danger mb-3"></i>
-            </div>
-            Are you sure you want to delete this product?<br><br>
-            <div class="alert alert-danger">
-              <i class="fas fa-exclamation-triangle me-2"></i>
-              This product will be permanently deleted!
-            </div>
-          `,
+          title: 'Delete Product',
+          text: 'Are you sure you want to delete this product? This action cannot be undone.',
           icon: 'warning',
           showCancelButton: true,
           confirmButtonColor: '#dc3545',
           cancelButtonColor: '#6c757d',
-          confirmButtonText: '<i class="fas fa-trash me-1"></i>Yes, delete it!',
-          cancelButtonText: '<i class="fas fa-times me-1"></i>Cancel',
-          customClass: {
-            confirmButton: 'btn btn-danger',
-            cancelButton: 'btn btn-secondary'
-          },
-          buttonsStyling: false
+          confirmButtonText: 'Yes, Delete'
         }).then((result) => {
           if (result.isConfirmed) {
-            Swal.fire({
-              title: 'Deleting product...',
-              html: '<div class="text-center"><i class="fas fa-spinner fa-spin fa-2x text-danger mb-3"></i><br>Please wait...</div>',
-              allowOutsideClick: false,
-              showConfirmButton: false
-            });
-
             window.location.href = href;
           }
         });
       });
     });
 
-    const customStyle = document.createElement('style');
-    customStyle.textContent = `
-      .swal-loading .swal2-html-container {
-        padding: 2rem 1rem;
-      }
-      
-      .swal2-popup .alert {
-        border-radius: 8px;
-        margin: 0;
-        font-size: 14px;
-      }
-      
-      .swal2-popup .alert-warning {
-        background-color: #fff3cd;
-        border-color: #ffeaa7;
-        color: #856404;
-      }
-      
-      .swal2-popup .alert-info {
-        background-color: #d1ecf1;
-        border-color: #74b9ff;
-        color: #0c5460;
-      }
-      
-      .swal2-popup .alert-danger {
-        background-color: #f8d7da;
-        border-color: #fd79a8;
-        color: #721c24;
-      }
-      
-      .swal2-popup .progress {
-        background-color: rgba(0,0,0,.1);
-        border-radius: 4px;
-      }
-      
-      .swal2-popup .progress-bar {
-        border-radius: 4px;
-      }
-      
-      .swal2-confirm.btn {
-        margin-right: 8px !important;
-      }
-    `;
-    document.head.appendChild(customStyle);
+    document.querySelectorAll('.btn-delete-message').forEach(btn => {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        const href = this.href;
+        
+        Swal.fire({
+          title: 'Delete Message',
+          text: 'Are you sure you want to delete this message? This action cannot be undone.',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#dc3545',
+          cancelButtonColor: '#6c757d',
+          confirmButtonText: 'Yes, Delete'
+        }).then((result) => {
+          if (result.isConfirmed) {
+            window.location.href = href;
+          }
+        });
+      });
+    });
   </script>
-  <?php unset($_SESSION['bulk_reset_results']); ?>
 
 </body>
-
 </html>
